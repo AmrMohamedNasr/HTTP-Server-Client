@@ -5,9 +5,8 @@
  *      Author: michael
  */
 #include "batch_parser.h"
-#include "../../web_models/request.h"
+//#include "../../web_models/request.h"
 #include "../../file_system/file_handler.h"
-
 
 bool BatchParser:: read_input(string file) {
 	// To be implemented.
@@ -19,9 +18,9 @@ bool BatchParser::has_next() {
 	return true;
 }
 
-Request BatchParser::next() {
-	// To be implemented.
-	return Request();
-}
-
-
+//Request BatchParser::next() {
+//	// To be implemented.
+//	return Request();
+//}
+//
+//
