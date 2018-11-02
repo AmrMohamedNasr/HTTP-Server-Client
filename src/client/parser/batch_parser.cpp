@@ -5,22 +5,46 @@
  *      Author: michael
  */
 #include "batch_parser.h"
-//#include "../../web_models/request.h"
 #include "../../file_system/file_handler.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+vector<string> split_spaces(string str) {
+	string buf;
+	stringstream strs(str);
+	vector<string> tokens;
+	while (strs >> buf) {
+		tokens.push_back(buf);
+	}
+	return tokens;
+}
 
 bool BatchParser:: read_input(string file) {
-	// To be implemented.
+	ifstream ifstr;
+	ifstr.open(file);
+	if (!ifstr) {
+		return false;
+	}
+	string line;
+	while (getline(ifstr, line)) {
+		vector<string> words = split_spaces(line);
+		//TODO
+	}
+	// TODO
 	return true;
 }
+
+
 
 bool BatchParser::has_next() {
 	// To be implemented.
 	return true;
 }
 
-//Request BatchParser::next() {
-//	// To be implemented.
-//	return Request();
-//}
-//
-//
+Request BatchParser::next() {
+	// To be implemented.
+	return Request();
+}
+
+
