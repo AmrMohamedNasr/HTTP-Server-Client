@@ -29,6 +29,20 @@ bool BatchParser:: read_input(string file) {
 	string line;
 	while (getline(ifstr, line)) {
 		vector<string> words = split_spaces(line);
+		Request req = Request();
+		if(words.size() == 4 || words.size() == 3 ) {
+			if(words[0] == "GET") {
+
+			} else if (words[0] == "POST") {
+
+			} else {
+				cout << "Invalid command format" << endl;
+				return false;
+			}
+		} else {
+			cout << "Invalid command format" << endl;
+			return false;
+		}
 		//TODO
 	}
 	// TODO
