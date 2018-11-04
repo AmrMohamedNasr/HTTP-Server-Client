@@ -20,34 +20,64 @@ using namespace std;
 
 #define RETRIES	3
 #define	MAX_CONNECTIONS	100
-#define RCVBUFSIZE 32
+#define RCVBUFSIZE 64
 
-void handleClient(int socket) {
+inline bool ends_with(std::string const & value, std::string const & ending) {
+    if (ending.size() > value.size()) return false;
+    return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+void print_raw_string(string s) {
+	for (char& p : s)
+	{
+	    int c = (unsigned char) p;
+	    switch (c)
+	    {
+	        case '\\':
+	            printf("\\\\");
+	            break;
+	        case '\n':
+	            printf("\\n");
+	            break;
+	        case '\r':
+	            printf("\\r");
+	            break;
+	        case '\t':
+	            printf("\\t");
+	            break;
+	        default:
+	            if (isprint(c))
+	            {
+	                putchar(c);
+	            }
+	            else
+	            {
+	                printf("\\x%X", c);
+	            }
+	            break;
+	    }
+	}
+}
+string recv_req(int socket) {
 	char echoBuffer[RCVBUFSIZE];
+	string request = string();
 	int recvMsgSize;
-	/* Buffer for echo string */
-	/* Size of received message */
-	/* Receive message from client */
 	if ((recvMsgSize = recv(socket, echoBuffer, RCVBUFSIZE, 0)) < 0) {
 		perror("recv() failed");
-		return;
+		return "";
 	}
-	/* Send received string and receive again until end of transmission */
-	while (recvMsgSize > 0) /* zero indicates end of transmission */
-	{
-		cout << string(echoBuffer);
-		/*
-		if (send(socket, echoBuffer, recvMsgSize, 0) != recvMsgSize) {
-			perror("send() failed");
-			return;
-		}
-		*/
+	request.append(echoBuffer);
+	while (!ends_with(request,"\r\n\r\n") && recvMsgSize > 0) {
+		memset(echoBuffer, 0, RCVBUFSIZE);
 		if ((recvMsgSize = recv(socket, echoBuffer, RCVBUFSIZE, 0)) < 0) {
 			perror("recv() failed");
-			return;
+			return "";
 		}
+		request.append(echoBuffer);
 	}
-	close(socket);
+	return request;
+}
+void handleClient(int socket) {
+	string s = recv_req(socket);
 }
 
 void Server::start_server(int port) {
@@ -100,8 +130,9 @@ void Server::start_server(int port) {
 			break;
 		}
 		printf("Handling client %s\n", inet_ntoa(clientAddr.sin_addr));
-		thread worker(handleClient, clientSocket);
-		worker.detach();
+		handleClient(clientSocket);
+		//thread worker(handleClient, clientSocket);
+		//worker.detach();
 	}
 	close(listenSocket);
 }
