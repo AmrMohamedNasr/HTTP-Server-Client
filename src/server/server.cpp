@@ -6,6 +6,7 @@
  */
 
 #include "server.h"
+#include "../file_system/file_handler.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
