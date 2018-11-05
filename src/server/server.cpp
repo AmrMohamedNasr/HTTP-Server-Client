@@ -7,6 +7,8 @@
 
 #include "server.h"
 #include "../file_system/file_handler.h"
+#include "../web_models/request.h"
+#include "../web_models/response.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -16,68 +18,72 @@
 #include <thread>
 #include <unistd.h>
 
+#include "../utils/string_utils.h"
+#include "../utils/web_utils.h"
+
 using namespace std;
 
 #define RETRIES	3
 #define	MAX_CONNECTIONS	100
-#define RCVBUFSIZE 64
 
-inline bool ends_with(std::string const & value, std::string const & ending) {
-    if (ending.size() > value.size()) return false;
-    return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
-}
-void print_raw_string(string s) {
-	for (char& p : s)
-	{
-	    int c = (unsigned char) p;
-	    switch (c)
-	    {
-	        case '\\':
-	            printf("\\\\");
-	            break;
-	        case '\n':
-	            printf("\\n");
-	            break;
-	        case '\r':
-	            printf("\\r");
-	            break;
-	        case '\t':
-	            printf("\\t");
-	            break;
-	        default:
-	            if (isprint(c))
-	            {
-	                putchar(c);
-	            }
-	            else
-	            {
-	                printf("\\x%X", c);
-	            }
-	            break;
-	    }
-	}
-}
-string recv_req(int socket) {
-	char echoBuffer[RCVBUFSIZE];
-	string request = string();
-	int recvMsgSize;
-	if ((recvMsgSize = recv(socket, echoBuffer, RCVBUFSIZE, 0)) < 0) {
-		perror("recv() failed");
-		return "";
-	}
-	request.append(echoBuffer);
-	while (!ends_with(request,"\r\n\r\n") && recvMsgSize > 0) {
-		memset(echoBuffer, 0, RCVBUFSIZE);
-		if ((recvMsgSize = recv(socket, echoBuffer, RCVBUFSIZE, 0)) < 0) {
-			perror("recv() failed");
-			return "";
-		}
-		request.append(echoBuffer);
-	}
-	return request;
-}
+
 void handleClient(int socket) {
-	string s = recv_req(socket);
+	string s;
+	while ((s = recv_headers(socket)) != "") {
+		if (s.size() == 0) {
+			close(socket);
+			return;
+		}
+		Request r = Request(s);
+		FileHandler handler = FileHandler();
+		if (r.getType() == GET) {
+			string rel_path = "." + r.getUrl();
+			if (handler.check_file(rel_path)) {
+				string data = handler.read_file(rel_path);
+				Response res = Response(200, r.getProtocol(), "OK");
+				res.addHeader("Content-Length", to_string(data.size()));
+				string res_s = res.format_response();
+				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
+					perror("Response Header Error");
+				}
+				if (send(socket, data.c_str(), data.size(), 0) < 0) {
+					perror("Response Data Error");
+				}
+			} else {
+				Response res = Response(404, r.getProtocol(), "Not Found");
+				res.addHeader("Content-Length", to_string(0));
+				string res_s = res.format_response();
+				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
+					perror("Response Error");
+				}
+			}
+		} else {
+			string rel_path = "." + r.getUrl();
+			for (auto it = r.getHeaders().begin(); it != r.getHeaders().end(); it++) {
+				cout << it->first << " " << it->second << endl;
+			}
+			if (!r.hasHeader("Content-Length")) {
+				Response res = Response(404, r.getProtocol(), "Not Found");
+				res.addHeader("Content-Length", to_string(0));
+				string res_s = res.format_response();
+				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
+					perror("Response Error");
+				}
+			} else {
+				int len_bytes = stoi(r.getHeaderValue("Content-Length"));
+				cout << len_bytes << endl;
+				Response res = Response(200, r.getProtocol(), "OK");
+				res.addHeader("Content-Length", to_string(0));
+				string res_s = res.format_response();
+				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
+					perror("Response Header Error");
+				}
+				string data = recv_data(socket, len_bytes);
+				handler.write_file(rel_path, data);
+			}
+		}
+	}
+	close(socket);
 }
 
 void Server::start_server(int port) {
@@ -129,10 +135,9 @@ void Server::start_server(int port) {
 			cout << "Could not accept connection !" << endl;
 			break;
 		}
-		printf("Handling client %s\n", inet_ntoa(clientAddr.sin_addr));
-		handleClient(clientSocket);
-		//thread worker(handleClient, clientSocket);
-		//worker.detach();
+		cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
+		thread worker(handleClient, clientSocket);
+		worker.detach();
 	}
 	close(listenSocket);
 }

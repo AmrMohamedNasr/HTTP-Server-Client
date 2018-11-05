@@ -19,8 +19,10 @@ class Response {
 	public:
 		Response();
 		Response(int code, PROTOCOL proto, string messageCode);
+		bool hasHeader(string key);
 		string getHeaderValue(string key);
-		void addHeaderValue(string key, string value);
+		void addHeader(string key, string value);
+		string format_response();
 
 		const string& getData() const {
 			return data;
