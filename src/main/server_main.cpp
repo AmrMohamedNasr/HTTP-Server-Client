@@ -5,7 +5,7 @@
 using namespace std;
 
 bool isNum(string num) {
-	for (int i = 0; i < num.size(); i++) {
+	for (unsigned int i = 0; i < num.size(); i++) {
 		if (!isdigit(num[i])) {
 			return false;
 		}
