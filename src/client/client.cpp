@@ -21,7 +21,7 @@
 #define RCVBUFSIZE 32
 using namespace std;
 
-void Client::start_client(int port, char *server_ip) {
+void Client::start_client(int port, char *server_ip, string file) {
 	int listenSocket;
 	int ntry = 0;
 	struct sockaddr_in serverAdd;
