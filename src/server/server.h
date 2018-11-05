@@ -6,4 +6,6 @@ class Server {
 		void start_server(int port);
 };
 
+void handleClient(int socket);
+
 #endif
