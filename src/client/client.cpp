@@ -5,6 +5,8 @@
  *      Author: michael
  */
 #include "client.h"
+#include "parser/batch_parser.h"
+#include "../utils/web_utils.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -27,62 +29,71 @@ void Client::start_client(int port, char *server_ip, string file) {
 	struct sockaddr_in serverAdd;
 	char echoBuffer[RCVBUFSIZE];
 	map <string, int> myConnections;
-	/* Create a reliable, stream socket using TCP */
-	while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
-		ntry++;
-		cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-	}
 
-
-	memset(&serverAdd, 0 , sizeof(sockaddr_in));
-	serverAdd.sin_family = AF_INET;
-	serverAdd.sin_addr.s_addr = htonl(INADDR_ANY);
-	serverAdd.sin_port = htons(port);
-	ntry = 0;
-	int success = -1;
-
-	while((success = connect(listenSocket, (struct sockaddr *) &serverAdd, sizeof(serverAdd))) < 0 && ntry < RETRIES) {
-		ntry++;
-		cout << "Failed to connect to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-	}
-	if (success < 0) {
-		perror("connect");
-		cout << "Could not connect to server. Ending program !" << endl;
+	BatchParser parser;
+	if (!parser.read_input(file)) {
+		perror("File reading");
+		cout << "Could not read requests. Ending program !" << endl;
 		return;
 	}
-	cout << "Port " << port << " is connected to server and ready." << endl;
+	Request req;
+	while(parser.has_next()) {
+		// request to be sent.
+		req = parser.next();
+		// format this request.
+		string str = req.format_request();
+		// get length of request.
+		int stringLen = str.length();
 
-	/// this part should be in another function ///
-	int stringLen;
-	char *stringToSend = "e";
-	stringLen = strlen(stringToSend);
+		int listenSocket;
+		int ntry = 0;
+		struct sockaddr_in serverAdd;
+		char echoBuffer[RCVBUFSIZE];
+		/* Create a reliable, stream socket using TCP */
+		while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
+			ntry++;
+			cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+		}
 
-	/* Send the string to the server */
-	ntry = 0;
-	success = -1;
-	while ((success = send(listenSocket, stringToSend, stringLen, 0))!= stringLen && ntry < RETRIES) {
-		ntry++;
-		cout << "Failed to send to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-	}
-	if (success < 0) {
-		perror("send");
-		cout << "Could not send to server. Ending program !" << endl;
-		return;
-	}
 
-	unsigned int bytesRcvd, totalBytesRcvd;
+		memset(&serverAdd, 0 , sizeof(sockaddr_in));
+		serverAdd.sin_family = AF_INET;
+		serverAdd.sin_addr.s_addr = htonl(INADDR_ANY);
+		serverAdd.sin_port = htons(port);
+		ntry = 0;
+		int success = -1;
 
-	while (totalBytesRcvd < stringLen)
-	{
-		if ((bytesRcvd = recv(listenSocket, echoBuffer, RCVBUFSIZE - 1, 0)) <= 0) {
-			perror("recv() failed");
+		while((success = connect(listenSocket, (struct sockaddr *) &serverAdd, sizeof(serverAdd))) < 0 && ntry < RETRIES) {
+			ntry++;
+			cout << "Failed to connect to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+		}
+		if (success < 0) {
+			perror("connect");
+			cout << "Could not connect to server. Ending program !" << endl;
 			return;
 		}
-		totalBytesRcvd += bytesRcvd;
-		echoBuffer[bytesRcvd] = '\0';
-		cout << echoBuffer << endl;
-	}
+		cout << "Port " << port << " is connected to server and ready." << endl;
 
+	/// this part should be in another function ///
+
+
+	/* Send the string to the server */
+		ntry = 0;
+		success = -1;
+		while ((success = send(listenSocket, str.c_str() , stringLen, 0))!= stringLen && ntry < RETRIES) {
+			ntry++;
+			cout << "Failed to send to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+		}
+		if (success < 0) {
+			perror("send");
+			cout << "Could not send to server. Ending program !" << endl;
+			return;
+		}
+
+		int bytesRcvd, totalBytesRcvd;
+		string headers = recv_headers(listenSocket);
+
+	}
 	close(listenSocket);
 	exit(0);
 
