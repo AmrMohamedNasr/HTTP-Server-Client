@@ -17,6 +17,6 @@ class FileHandler {
 		void set_read_file(string path);
 		void set_write_file(string path);
 		size_t read_chunk(int size, char * buff);
-		bool write_chunk(char * chunk, int size);
+		bool write_chunk(char * chunk, streamsize size);
 };
 #endif

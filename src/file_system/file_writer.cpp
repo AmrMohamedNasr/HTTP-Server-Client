@@ -10,7 +10,7 @@ void FileWriter::set_file(string path) {
 	this->ofs = ofstream(path);
 }
 
-bool FileWriter::write_chunk(char * chunk, int size) {
+bool FileWriter::write_chunk(char * chunk, streamsize size) {
 	if (!this->ofs) {
 		return false;
 	}

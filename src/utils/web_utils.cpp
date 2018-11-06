@@ -57,7 +57,7 @@ string recv_data(int socket, int num_bytes) {
 	string data= string();
 	int recvMsgSize;
 	memset(echoBuffer, 0, num_bytes + 1);
-	if ((recvMsgSize = recv(socket, echoBuffer, num_bytes, 0) < 0)) {
+	if ((recvMsgSize = recv(socket, echoBuffer, num_bytes, 0)) < 0) {
 		perror("Recv data failed");
 		return "";
 	}
@@ -67,7 +67,7 @@ string recv_data(int socket, int num_bytes) {
 int recv_data_bytes(int socket, int num_bytes, char * buff) {
 	int recvMsgSize;
 	memset(buff, 0, num_bytes);
-	if ((recvMsgSize = recv(socket, buff, num_bytes, 0) < 0)) {
+	if ((recvMsgSize = recv(socket, buff, num_bytes, 0)) < 0) {
 		perror("Recv data failed");
 		return 0;
 	}

@@ -17,6 +17,7 @@
 #include <cstring>
 #include <thread>
 #include <unistd.h>
+#include <csignal>
 
 #include "../utils/string_utils.h"
 #include "../utils/web_utils.h"
@@ -30,7 +31,7 @@ using namespace std;
 void handleClient(int socket) {
 	string s;
 	char rem_data[RCV_MSG_SIZE];
-	int rem_size;
+	int rem_size = 0;
 	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size)) != "") {
 		if (s.size() == 0) {
 			close(socket);
@@ -52,6 +53,9 @@ void handleClient(int socket) {
 				char buff[RCV_MSG_SIZE];
 				while (bytes_sent < file_bytes) {
 					size_t bytes_read_in = handler.read_chunk(RCV_MSG_SIZE, buff);
+					if (bytes_read_in == 0) {
+						break;
+					}
 					send_data(socket, buff, bytes_read_in);
 					bytes_sent += bytes_read_in;
 				}
@@ -79,7 +83,10 @@ void handleClient(int socket) {
 				handler.write_chunk(rem_data, rem_size);
 				char buff[RCV_MSG_SIZE];
 				while (bytes_recieved < len_bytes) {
-					int data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
+					streamsize data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
+					if (data_len == 0) {
+						break;
+					}
 					handler.write_chunk(buff, data_len);
 					bytes_recieved += data_len;
 				}
@@ -87,6 +94,11 @@ void handleClient(int socket) {
 		}
 	}
 	close(socket);
+}
+
+void my_handler(int s){
+	   printf("Caught signal %d\n",s);
+	   exit(1);
 }
 
 void Server::start_server(int port) {
@@ -127,6 +139,13 @@ void Server::start_server(int port) {
 		cout << "Could not listen on port. Ending program !" << endl;
 		return;
 	}
+	 struct sigaction sigIntHandler;
+
+   sigIntHandler.sa_handler = my_handler;
+   sigemptyset(&sigIntHandler.sa_mask);
+   sigIntHandler.sa_flags = 0;
+
+   sigaction(SIGINT, &sigIntHandler, NULL);
 	cout << "Port " << port << " is listening and ready." << endl;
 	struct sockaddr_in clientAddr;
 	unsigned int clientLen = sizeof(clientAddr);
@@ -144,4 +163,3 @@ void Server::start_server(int port) {
 	}
 	close(listenSocket);
 }
-

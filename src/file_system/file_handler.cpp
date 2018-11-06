@@ -38,6 +38,6 @@ size_t FileHandler::get_file_size(string path) {
 	}
 	return in.tellg();
 }
-bool FileHandler::write_chunk(char * chunk, int size) {
+bool FileHandler::write_chunk(char * chunk, streamsize size) {
 	return this->writer.write_chunk(chunk, size);
 }

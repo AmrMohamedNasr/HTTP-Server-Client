@@ -19,7 +19,7 @@ class FileWriter {
 		ofstream ofs;
 	public:
 		void set_file(string path);
-		bool write_chunk(char * chunk, int size);
+		bool write_chunk(char * chunk, streamsize size);
 };
 
 
