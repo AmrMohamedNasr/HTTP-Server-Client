@@ -17,9 +17,10 @@ class Request {
 	public:
 		Request();
 		Request(string command);
-		Request(char * recieved_data);
 		string getHeaderValue(string key);
-
+		bool hasHeader(string key);
+		void addHeader(string key, string value);
+		string format_request();
 		const string& getData() const {
 			return data;
 		}
@@ -52,12 +53,12 @@ class Request {
 			this->type = type;
 		}
 
-	const string& getUrl() const {
-		return url;
-	}
+		const string& getUrl() const {
+			return url;
+		}
 
-	void setUrl(const string& url) {
-		this->url = url;
-	}
+		void setUrl(const string& url) {
+			this->url = url;
+		}
 };
 #endif
