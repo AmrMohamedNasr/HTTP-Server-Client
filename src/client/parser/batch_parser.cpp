@@ -53,7 +53,7 @@ bool BatchParser::has_next() {
 
 Request BatchParser::next() {
 	Request req = requests.front();
-	requests.erase(0);
+	requests.erase(requests.begin());
 	return req;
 }
 

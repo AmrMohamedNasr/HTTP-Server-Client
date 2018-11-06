@@ -7,6 +7,7 @@
 #include "client.h"
 #include "parser/batch_parser.h"
 #include "../utils/web_utils.h"
+#include "../web_models/response.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -25,11 +26,7 @@ using namespace std;
 
 void Client::start_client(int port, char *server_ip, string file) {
 	int listenSocket;
-	int ntry = 0;
-	struct sockaddr_in serverAdd;
-	char echoBuffer[RCVBUFSIZE];
 	map <string, int> myConnections;
-
 	BatchParser parser;
 	if (!parser.read_input(file)) {
 		perror("File reading");
@@ -45,10 +42,9 @@ void Client::start_client(int port, char *server_ip, string file) {
 		// get length of request.
 		int stringLen = str.length();
 
-		int listenSocket;
+
 		int ntry = 0;
 		struct sockaddr_in serverAdd;
-		char echoBuffer[RCVBUFSIZE];
 		/* Create a reliable, stream socket using TCP */
 		while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
 			ntry++;
@@ -90,9 +86,24 @@ void Client::start_client(int port, char *server_ip, string file) {
 			return;
 		}
 
-		int bytesRcvd, totalBytesRcvd;
-		string headers = recv_headers(listenSocket);
 
+		string resp_string = recv_headers(listenSocket);
+		if (resp_string == "") {
+			perror("receive");
+			cout << "Could not receive response from server. Ending program !" << endl;
+			return;
+		}
+		Response resp = Response(resp_string);
+		if (!resp.hasHeader("Content-Length")) {
+			perror("receive");
+			cout << "Could not receive Content-length from server. Ending program !" << endl;
+			return;
+		}
+		string data_string = recv_data(listenSocket,
+				atoi(resp.getHeaderValue("Content-Length").c_str()));
+		resp.setData(data_string);
+		cout << resp.format_response() << endl;
+		// To Be Written in file.
 	}
 	close(listenSocket);
 	exit(0);
