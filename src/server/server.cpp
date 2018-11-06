@@ -25,61 +25,64 @@ using namespace std;
 
 #define RETRIES	3
 #define	MAX_CONNECTIONS	100
-
+#define RCV_MSG_SIZE	128
 
 void handleClient(int socket) {
 	string s;
-	while ((s = recv_headers(socket)) != "") {
+	char rem_data[RCV_MSG_SIZE];
+	int rem_size;
+	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size)) != "") {
 		if (s.size() == 0) {
 			close(socket);
 			return;
 		}
 		Request r = Request(s);
+		cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
 		FileHandler handler = FileHandler();
 		if (r.getType() == GET) {
 			string rel_path = "." + r.getUrl();
 			if (handler.check_file(rel_path)) {
-				string data = handler.read_file(rel_path);
+				handler.set_read_file(rel_path);
 				Response res = Response(200, r.getProtocol(), "OK");
-				res.addHeader("Content-Length", to_string(data.size()));
+				size_t file_bytes = handler.get_file_size(rel_path);
+				res.addHeader("Content-Length", to_string(file_bytes));
 				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Header Error");
-				}
-				if (send(socket, data.c_str(), data.size(), 0) < 0) {
-					perror("Response Data Error");
+				send_data(socket, res_s);
+				size_t bytes_sent = 0;
+				char buff[RCV_MSG_SIZE];
+				while (bytes_sent < file_bytes) {
+					size_t bytes_read_in = handler.read_chunk(RCV_MSG_SIZE, buff);
+					send_data(socket, buff, bytes_read_in);
+					bytes_sent += bytes_read_in;
 				}
 			} else {
 				Response res = Response(404, r.getProtocol(), "Not Found");
 				res.addHeader("Content-Length", to_string(0));
 				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Error");
-				}
+				send_data(socket, res_s);
 			}
 		} else {
 			string rel_path = "." + r.getUrl();
-			for (auto it = r.getHeaders().begin(); it != r.getHeaders().end(); it++) {
-				cout << it->first << " " << it->second << endl;
-			}
 			if (!r.hasHeader("Content-Length")) {
 				Response res = Response(404, r.getProtocol(), "Not Found");
 				res.addHeader("Content-Length", to_string(0));
 				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Error");
-				}
+				send_data(socket, res_s);
 			} else {
-				int len_bytes = stoi(r.getHeaderValue("Content-Length"));
-				cout << len_bytes << endl;
+				size_t len_bytes = stoi(r.getHeaderValue("Content-Length"));
 				Response res = Response(200, r.getProtocol(), "OK");
 				res.addHeader("Content-Length", to_string(0));
 				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Header Error");
+				send_data(socket, res_s);
+				handler.set_write_file(rel_path);
+				size_t bytes_recieved = rem_size;
+				handler.write_chunk(rem_data, rem_size);
+				char buff[RCV_MSG_SIZE];
+				while (bytes_recieved < len_bytes) {
+					int data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
+					handler.write_chunk(buff, data_len);
+					bytes_recieved += data_len;
 				}
-				string data = recv_data(socket, len_bytes);
-				handler.write_file(rel_path, data);
 			}
 		}
 	}

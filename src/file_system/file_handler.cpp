@@ -19,21 +19,25 @@ bool FileHandler::check_file(string path) {
 	return true;
 }
 
-string FileHandler::read_file(string path) {
-	ifstream t(path);
-	if (!t){
-		return "";
-	}
-	string str((std::istreambuf_iterator<char>(t)),
-	                 std::istreambuf_iterator<char>());
-	return str;
+void FileHandler::set_read_file(string path) {
+	this->reader.set_file(path);
 }
 
-bool FileHandler::write_file(string path, string data) {
-	ofstream out(path);
-	if (!out) {
-		return false;
+void FileHandler::set_write_file(string path) {
+	this->writer.set_file(path);
+}
+
+size_t FileHandler::read_chunk(int size, char * buff) {
+	return this->reader.read_chunk(size, buff);
+}
+
+size_t FileHandler::get_file_size(string path) {
+	ifstream in(path, ifstream::ate | ifstream::binary);
+	if (!in) {
+		return 0;
 	}
-	out << data;
-	return true;
+	return in.tellg();
+}
+bool FileHandler::write_chunk(char * chunk, int size) {
+	return this->writer.write_chunk(chunk, size);
 }
