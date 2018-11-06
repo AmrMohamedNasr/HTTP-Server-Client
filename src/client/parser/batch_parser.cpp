@@ -26,39 +26,35 @@ bool BatchParser:: read_input(string file) {
 	if (!ifstr) {
 		return false;
 	}
-	string line;
+	string line, s="";
+
 	while (getline(ifstr, line)) {
 		vector<string> words = split_spaces(line);
-		Request req = Request();
-		if(words.size() == 4 || words.size() == 3 ) {
-			if(words[0] == "GET") {
 
-			} else if (words[0] == "POST") {
-
-			} else {
+		if (words[0] == "GET" || words[0] == "POST"){
+			if(s!="")
+				requests.push_back(Request(s));
+			s = "";
+			if (!(words.size() == 4 || words.size() == 3)){
 				cout << "Invalid command format" << endl;
 				return false;
 			}
-		} else {
-			cout << "Invalid command format" << endl;
-			return false;
 		}
-		//TODO
+		s += line;
 	}
-	// TODO
+	if (s != "")
+		requests.push_back(Request(s));
 	return true;
 }
 
-
-
 bool BatchParser::has_next() {
-	// To be implemented.
-	return true;
+	return !(requests.empty());
 }
 
 Request BatchParser::next() {
-	// To be implemented.
-	return Request();
+	Request req = requests.front();
+	requests.erase(0);
+	return req;
 }
 
 
