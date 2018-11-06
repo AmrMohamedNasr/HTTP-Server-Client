@@ -32,13 +32,16 @@ Request::Request(string command) {
 	} else if (request_words[2] == "HTTP/1.1") {
 		this->protocol = HTTP1_1;
 	}
-	for (unsigned int i = 1; i < lines.size(); i++) {
+	unsigned int i = 1;
+	for (; i < lines.size() && lines[i] != "\r\n"; i++) {
 		request_words = split_string(lines[i], ":", 2);
 		trim(request_words[0]);
 		trim(request_words[1]);
 		this->headers[request_words[0]] = request_words[1];
 	}
-	this->data = "";
+	for(; i < lines.size(); i++){
+		this->data += lines[i];
+	}
 }
 
 void Request::addHeader(string key, string value) {
