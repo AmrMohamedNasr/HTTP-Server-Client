@@ -62,17 +62,9 @@ void clean_workers() {
 	}
 }
 
-void kill_workers() {
-	for (unsigned int i = workers.size() - 1; i >= 0; i--) {
-		workers[i]->kill_thread();
-		delete workers[i];
-	}
-}
-
-void my_handler(int s){
-	kill_workers();
-	printf("Closed Server%d\n",s);
-	exit(1);
+void my_handler(int s) {
+	printf("\nClosed Server\n");
+	exit(0);
 }
 
 void Server::start_server(int port) {
