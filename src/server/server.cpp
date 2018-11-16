@@ -6,9 +6,6 @@
  */
 
 #include "server.h"
-#include "../file_system/file_handler.h"
-#include "../web_models/request.h"
-#include "../web_models/response.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -17,77 +14,62 @@
 #include <cstring>
 #include <thread>
 #include <unistd.h>
-
-#include "../utils/string_utils.h"
-#include "../utils/web_utils.h"
+#include <csignal>
+#include "client_worker.h"
 
 using namespace std;
 
 #define RETRIES	3
-#define	MAX_CONNECTIONS	100
+#define	MAX_CONNECTIONS	1000
+#define TIMEOUT	120
+#define	MAX_WORKERS	16
 
+static vector<ClientWorker *> workers;
 
-void handleClient(int socket) {
-	string s;
-	while ((s = recv_headers(socket)) != "") {
-		if (s.size() == 0) {
-			close(socket);
-			return;
-		}
-		Request r = Request(s);
-		FileHandler handler = FileHandler();
-		if (r.getType() == GET) {
-			string rel_path = "." + r.getUrl();
-			if (handler.check_file(rel_path)) {
-				string data = handler.read_file(rel_path);
-				Response res = Response(200, r.getProtocol(), "OK");
-				res.addHeader("Content-Length", to_string(data.size()));
-				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Header Error");
-				}
-				if (send(socket, data.c_str(), data.size(), 0) < 0) {
-					perror("Response Data Error");
-				}
-			} else {
-				Response res = Response(404, r.getProtocol(), "Not Found");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Error");
-				}
-			}
+inline int diff_millis(struct timeval t2, struct timeval t1) {
+	return (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec)/1000;
+}
+
+void clean_workers() {
+	struct timeval cur;
+	gettimeofday(&cur, NULL);
+	double k, max = 0;
+	ClientWorker *cli, *maxC = 0;
+	int maxI = -1, items_removed = 0;
+	for (int i = workers.size() - 1; i >= 0; i--) {
+		cli = workers[i];
+		k = diff_millis(cur, cli->getLatestTime());
+		if (cli->isFinished()) {
+			cli->kill_thread();
+			workers.erase(workers.begin() + i);
+			items_removed++;
+			delete cli;
 		} else {
-			string rel_path = "." + r.getUrl();
-			for (auto it = r.getHeaders().begin(); it != r.getHeaders().end(); it++) {
-				cout << it->first << " " << it->second << endl;
-			}
-			if (!r.hasHeader("Content-Length")) {
-				Response res = Response(404, r.getProtocol(), "Not Found");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Error");
-				}
-			} else {
-				int len_bytes = stoi(r.getHeaderValue("Content-Length"));
-				cout << len_bytes << endl;
-				Response res = Response(200, r.getProtocol(), "OK");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				if (send(socket, res_s.c_str(), res_s.size(), 0) < 0) {
-					perror("Response Header Error");
-				}
-				string data = recv_data(socket, len_bytes);
-				handler.write_file(rel_path, data);
+			if (k > max) {
+				items_removed = 0;
+				maxI = i;
+				max = k;
+				maxC = cli;
 			}
 		}
 	}
-	close(socket);
+	if (workers.size() > MAX_WORKERS) {
+		if (maxI != -1) {
+			maxC->kill_thread();
+			workers.erase(workers.begin() + maxI - items_removed);
+			delete maxC;
+		}
+	}
+}
+
+void my_handler(int s) {
+	printf("\nClosed Server\n");
+	exit(0);
 }
 
 void Server::start_server(int port) {
 	int ntry = 0;
+	workers = vector<ClientWorker *>();
 	int listenSocket;
 	while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
 		ntry++;
@@ -114,6 +96,10 @@ void Server::start_server(int port) {
 		cout << "Could not bind listening port. Ending program !" << endl;
 		return;
 	}
+	int enable = 1;
+	if (setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+		perror("setsockopt(SO_REUSEADDR) failed");
+	}
 	ntry = 0;
 	while((success = listen(listenSocket, MAX_CONNECTIONS)) < 0 && ntry < RETRIES) {
 		ntry++;
@@ -124,21 +110,31 @@ void Server::start_server(int port) {
 		cout << "Could not listen on port. Ending program !" << endl;
 		return;
 	}
+	struct sigaction sigIntHandler;
+
+	sigIntHandler.sa_handler = my_handler;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+
+	sigaction(SIGINT, &sigIntHandler, NULL);
 	cout << "Port " << port << " is listening and ready." << endl;
 	struct sockaddr_in clientAddr;
 	unsigned int clientLen = sizeof(clientAddr);
 	int clientSocket;
-	vector<thread> working_threads;
 	for (;;) {
+		clean_workers();
 		if ((clientSocket = accept(listenSocket, (struct sockaddr *) &clientAddr,&clientLen)) < 0) {
 			perror("Socket Accepting");
 			cout << "Could not accept connection !" << endl;
 			break;
 		}
-		cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
-		thread worker(handleClient, clientSocket);
-		worker.detach();
+		if (setsockopt(clientSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+		    perror("setsockopt(SO_REUSEADDR) failed");
+		}
+		//cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
+		ClientWorker * worker = new ClientWorker(clientSocket, TIMEOUT * 1000);
+		workers.push_back(worker);
+		worker->start_serving();
 	}
 	close(listenSocket);
 }
-
