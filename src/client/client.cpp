@@ -8,6 +8,7 @@
 #include "parser/batch_parser.h"
 #include "../utils/web_utils.h"
 #include "../web_models/response.h"
+#include "../web_models/network_enums.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -20,11 +21,27 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define PIPLINE_LIMIT 3
 #define RETRIES 3
 #define RCVBUFSIZE 32
 using namespace std;
-void send_message(int listenSocket, Request req ) {
+map <string, int> myConnections;
+vector <pair<int, struct sockaddr_in>> socket_map;
+bool connect_server(int listenSocket,struct sockaddr_in serverAdd ) {
+	int ntry = 0;
+	int success = -1;
+	while((success = connect(listenSocket, (struct sockaddr *) &serverAdd, sizeof(serverAdd))) < 0 && ntry < RETRIES) {
+		ntry++;
+		cout << "Failed to connect to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+	}
+	if (success < 0) {
+		perror("connect");
+		cout << "Could not connect to server. Ending program !" << endl;
+		return false;
+	}
+	cout << " is connected to server and ready." << endl;
+	return true;
+}
+bool send_message(int listenSocket, struct sockaddr_in serverAdd, Request req, bool first ) {
 	string str = req.format_request();
 	// get length of request.
 	int stringLen = str.length();
@@ -35,35 +52,53 @@ void send_message(int listenSocket, Request req ) {
 		cout << "Failed to send to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
 	}
 	if (success < 0) {
-		perror("send");
-		cout << "Could not send to server. Ending program !" << endl;
-		return;
+		if (first && connect_server(listenSocket, serverAdd)) {
+			return send_message(listenSocket, serverAdd, req, false);
+		} else {
+			perror("send");
+			cout << "Could not send to server. Ending program !" << endl;
+			return false;
+		}
 	}
+	return true;
 }
 
-void receive_response(int listenSocket) {
+bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first) {
 	string resp_string = recv_headers(listenSocket);
 	if (resp_string == "") {
+		if (first && connect_server(listenSocket, serverAdd)) {
+			return receive_response(listenSocket, serverAdd, false);
+		}
 		perror("receive");
-		cout << "Could not receive response from server. Ending program !" << endl;
-		return;
+		cout << "Could not receive from server. Ending program !" << endl;
+		return false;
 	}
 	Response resp = Response(resp_string);
 	if (!resp.hasHeader("Content-Length")) {
 		perror("receive");
 		cout << "Could not receive Content-length from server. Ending program !" << endl;
-		return;
+		return false;
 	}
+	first = true;
 	string data_string = recv_data(listenSocket,
 			atoi(resp.getHeaderValue("Content-Length").c_str()));
+	if (data_string == "") {
+		if (first && connect_server(listenSocket, serverAdd)) {
+			return receive_response(listenSocket, serverAdd, false);
+		}
+		perror("receive");
+		cout << "Could not receive from server. Ending program !" << endl;
+		return false;
+	}
 	resp.setData(data_string);
+	// TODO write to file
 	cout << resp.format_response() << endl;
+	return true;
 }
 
 
 void Client::start_client(int port, char *server_ip, string file) {
 	int listenSocket;
-	map <string, int> myConnections;
 	BatchParser parser;
 	if (!parser.read_input(file)) {
 		perror("File reading");
@@ -79,48 +114,49 @@ void Client::start_client(int port, char *server_ip, string file) {
 		// request to be sent.
 		req = req_data.getRequest();
 		// format this request.
-		if (!req.hasHeader("host")) {
-			cout << "Failed to fetch host name. Ending program !" << endl;
-			return;
-		} else {
-			 record = gethostbyname(req.getHeaderValue("host").c_str());
-			 inAdd = (struct in_addr *)record->h_addr_list[0];
-		}
-		if (myConnections.find(req.getHeaderValue("host").c_str()) != myConnections.end()) {
-			listenSocket = myConnections.find(req.getHeaderValue("host").c_str())->second;
-		} else {
-			int ntry = 0;
-
-			/* Create a reliable, stream socket using TCP */
-			while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
-				ntry++;
-				cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-			}
-
-			memset(&serverAdd, 0 , sizeof(sockaddr_in));
-			serverAdd.sin_family = AF_INET;
-			serverAdd.sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
-			serverAdd.sin_port = htons(req_data.getPortNo());
-			ntry = 0;
-			int success = -1;
-
-			while((success = connect(listenSocket, (struct sockaddr *) &serverAdd, sizeof(serverAdd))) < 0 && ntry < RETRIES) {
-				ntry++;
-				cout << "Failed to connect to server. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-			}
-			if (success < 0) {
-				perror("connect");
-				cout << "Could not connect to server. Ending program !" << endl;
+		bool end = false;
+		while(!end && req.getType() == GET) {
+			if (!req.hasHeader("host")) {
+				cout << "Failed to fetch host name. Ending program !" << endl;
 				return;
+			} else {
+			 	 record = gethostbyname(req.getHeaderValue("host").c_str());
+			 	 inAdd = (struct in_addr *)record->h_addr_list[0];
 			}
-			cout << "Port " << port << " is connected to server and ready." << endl;
-			myConnections.insert(pair<string, int>(req.getHeaderValue("host").c_str(), listenSocket));
+			string key = req.getHeaderValue("host").c_str() + to_string(req_data.getPortNo());
+			if (myConnections.find(req.getHeaderValue("host").c_str()) != myConnections.end()) {
+				listenSocket = myConnections.find(key)->second;
+			} else {
+				int ntry = 0;
+				/* Create a reliable, stream socket using TCP */
+				while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
+					ntry++;
+					cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+				}
+
+				memset(&serverAdd, 0 , sizeof(sockaddr_in));
+				serverAdd.sin_family = AF_INET;
+				serverAdd.sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
+				serverAdd.sin_port = htons(req_data.getPortNo());
+
+				connect_server(listenSocket, serverAdd);
+				myConnections.insert(pair<string, int>(key, listenSocket));
+			}
+			socket_map.push_back(pair<int, struct sockaddr_in>(listenSocket, serverAdd));
+			send_message(listenSocket, serverAdd, req, true);
+			if (parser.has_next()) {
+				req_data = parser.next();
+				req = req_data.getRequest();
+			} else {
+				end = true;
+			}
 		}
-		send_message(listenSocket, req);
+		if (req.getType() == POST) {
+			// receive responses in Socket_map vector.
+		}
+
 		//TODO To Be Written in file.
 
-		// TODO This part need to be optimized ..
-		// connections are open for long time with nothing useful.
 		if (!parser.has_next()) {
 			map<string, int>::iterator it = myConnections.begin();
 			while(it != myConnections.end()) {
