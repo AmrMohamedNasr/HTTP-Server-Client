@@ -1,4 +1,5 @@
 /*
+
  * patch_parser.cpp
  *
  *  Created on: Nov 1, 2018
@@ -30,20 +31,20 @@ bool BatchParser:: read_input(string file) {
 
 	while (getline(ifstr, line)) {
 		vector<string> words = split_spaces(line);
-
-		if (words[0] == "GET" || words[0] == "POST"){
-			if(s!="")
-				requests.push_back(Request(s));
-			s = "";
-			if (!(words.size() == 4 || words.size() == 3)){
-				cout << "Invalid command format" << endl;
-				return false;
-			}
+		if (!(words.size() == 4 || words.size() == 3)){
+			cout << "Invalid command format" << endl;
+			return false;
 		}
-		s += line;
+		if (words[0] == "GET" || words[0] == "POST"){
+			s = words[0]+" "+words[1]+" "+"HTTP/1.1"+"\r\n";
+			Request req = Request(s);
+			req.addHeader("host",words[2]);
+			if(words.size() == 3)
+				requests.push_back(RequestAndPortNo(req));
+			else
+				requests.push_back(RequestAndPortNo(req,stoi(words[3])));
+		}else cout << "Invalid command format" << endl;
 	}
-	if (s != "")
-		requests.push_back(Request(s));
 	return true;
 }
 
