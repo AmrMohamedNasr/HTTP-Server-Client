@@ -20,6 +20,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#define PIPLINE_LIMIT 3
 #define RETRIES 3
 #define RCVBUFSIZE 32
 using namespace std;
@@ -70,6 +71,9 @@ void Client::start_client(int port, char *server_ip, string file) {
 		return;
 	}
 	Request req;
+	struct sockaddr_in serverAdd;
+	struct in_addr * inAdd;
+	hostent * record;
 	while(parser.has_next()) {
 		// request to be sent.
 		req = parser.next();
@@ -77,12 +81,15 @@ void Client::start_client(int port, char *server_ip, string file) {
 		if (!req.hasHeader("host")) {
 			cout << "Failed to fetch host name. Ending program !" << endl;
 			return;
+		} else {
+			 record = gethostbyname(req.getHeaderValue("host").c_str());
+			 inAdd = (struct in_addr *)record->h_addr_list[0];
 		}
 		if (myConnections.find(req.getHeaderValue("host").c_str()) != myConnections.end()) {
 			listenSocket = myConnections.find(req.getHeaderValue("host").c_str())->second;
 		} else {
 			int ntry = 0;
-			struct sockaddr_in serverAdd;
+
 			/* Create a reliable, stream socket using TCP */
 			while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
 				ntry++;
@@ -91,7 +98,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 
 			memset(&serverAdd, 0 , sizeof(sockaddr_in));
 			serverAdd.sin_family = AF_INET;
-			serverAdd.sin_addr.s_addr = htonl(INADDR_ANY);
+			serverAdd.sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
 			//TODO port number should be given with request using a map.
 			serverAdd.sin_port = htons(port);
 			ntry = 0;
