@@ -111,7 +111,15 @@ void Client::start_client(int port, char *server_ip, string file) {
 		}
 		send_message(listenSocket, req);
 		//TODO To Be Written in file.
-		close(listenSocket);
+
+		// TODO This part need to be optimized ..
+		// connections are open for long time with nothing useful.
+		if (!parser.has_next()) {
+			map<string, int>::iterator it = myConnections.begin();
+			while(it != myConnections.end()) {
+				close(it->second);
+			}
+		}
 	}
 
 	exit(0);
