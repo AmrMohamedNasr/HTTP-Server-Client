@@ -84,11 +84,18 @@ bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first
 			atoi(resp.getHeaderValue("Content-Length").c_str()));
 	if (data_string == "") {
 		if (first && connect_server(listenSocket, serverAdd)) {
-			return receive_response(listenSocket, serverAdd, false);
+			data_string = recv_data(listenSocket,
+						atoi(resp.getHeaderValue("Content-Length").c_str()));
+			if (data_string == "") {
+				perror("receive");
+				cout << "Could not receive from server. Ending program !" << endl;
+				return false;
+			}
+		} else {
+			perror("receive");
+			cout << "Could not receive from server. Ending program !" << endl;
+			return false;
 		}
-		perror("receive");
-		cout << "Could not receive from server. Ending program !" << endl;
-		return false;
 	}
 	resp.setData(data_string);
 	// TODO write to file
@@ -154,8 +161,6 @@ void Client::start_client(int port, char *server_ip, string file) {
 		if (req.getType() == POST) {
 			// receive responses in Socket_map vector.
 		}
-
-		//TODO To Be Written in file.
 
 		if (!parser.has_next()) {
 			map<string, int>::iterator it = myConnections.begin();
