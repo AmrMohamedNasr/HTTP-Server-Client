@@ -10,6 +10,7 @@
 
 #include <ctime>
 #include <thread>
+#include <sys/time.h>
 
 using namespace std;
 
@@ -19,14 +20,17 @@ class ClientWorker {
 		double timeout;
 		thread thd;
 	public:
-		time_t time;
+		struct timeval time;
 		volatile bool finish_work;
 		ClientWorker(int socket, unsigned long timeout);
 		void start_serving();
 		void kill_thread();
-		time_t getLatestTime();
+		struct timeval getLatestTime();
 		double getTimeout();
 		bool isFinished();
+		int getSocket() {
+			return socket;
+		}
 };
 
 void handleClient(int socket, ClientWorker *worker);

@@ -26,19 +26,23 @@ using namespace std;
 
 #define RCV_MSG_SIZE	512
 
+inline int diff_millis(struct timeval t2, struct timeval t1) {
+	return (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec)/1000;
+}
+
 void handleClient(int socket, ClientWorker *worker) {
 	string s;
 	char rem_data[RCV_MSG_SIZE];
 	int rem_size = 0;
-	time_t cur;
-	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size)) != "") {
-		time(&worker->time);
+	struct timeval cur;
+	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size, worker->isFinished())) != "") {
+		gettimeofday(&worker->time, NULL);
 		if (s.size() == 0) {
 			close(socket);
 			return;
 		}
 		Request r = Request(s);
-		cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
+		//cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
 		FileHandler handler = FileHandler();
 		if (r.getType() == GET) {
 			string rel_path = "." + r.getUrl();
@@ -49,23 +53,45 @@ void handleClient(int socket, ClientWorker *worker) {
 				res.addHeader("Content-Length", to_string(file_bytes));
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
+				/*
 				size_t bytes_sent = 0;
 				char buff[RCV_MSG_SIZE];
-				send_data(socket, res_s);
+				if (!send_data(socket, res_s)) {
+					worker->finish_work = true;
+					close(socket);
+					return;
+				}
+
 				while (bytes_sent < file_bytes) {
 					size_t bytes_read_in = handler.read_chunk(RCV_MSG_SIZE, buff);
 					if (bytes_read_in == 0) {
 						break;
 					}
-					send_data(socket, buff, bytes_read_in);
+					if (!send_data(socket, buff, bytes_read_in)) {
+						worker->finish_work = true;
+						close(socket);
+						return;
+					}
 					bytes_sent += bytes_read_in;
+				}*/
+				std::ifstream t(rel_path);
+				std::string str((std::istreambuf_iterator<char>(t)),
+				                 std::istreambuf_iterator<char>());
+				if (!send_data(socket, res_s + str)) {
+					worker->finish_work = true;
+					close(socket);
+					return;
 				}
 			} else {
 				Response res = Response(404, r.getProtocol(), "Not Found");
 				res.addHeader("Content-Length", to_string(0));
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
-				send_data(socket, res_s);
+				if (!send_data(socket, res_s)) {
+					worker->finish_work = true;
+					close(socket);
+					return;
+				}
 			}
 		} else {
 			string rel_path = "." + r.getUrl();
@@ -74,14 +100,22 @@ void handleClient(int socket, ClientWorker *worker) {
 				res.addHeader("Content-Length", to_string(0));
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
-				send_data(socket, res_s);
+				if (!send_data(socket, res_s)) {
+					worker->finish_work = true;
+					close(socket);
+					return;
+				}
 			} else {
 				size_t len_bytes = stoi(r.getHeaderValue("Content-Length"));
 				Response res = Response(200, r.getProtocol(), "OK");
 				res.addHeader("Content-Length", to_string(0));
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
-				send_data(socket, res_s);
+				if (!send_data(socket, res_s)) {
+					worker->finish_work = true;
+					close(socket);
+					return;
+				}
 				handler.set_write_file(rel_path);
 				size_t bytes_recieved = rem_size;
 				handler.write_chunk(rem_data, rem_size);
@@ -89,7 +123,9 @@ void handleClient(int socket, ClientWorker *worker) {
 				while (bytes_recieved < len_bytes) {
 					streamsize data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
 					if (data_len == 0) {
-						break;
+						worker->finish_work = true;
+						close(socket);
+						return;
 					}
 					handler.write_chunk(buff, data_len);
 					bytes_recieved += data_len;
@@ -99,8 +135,8 @@ void handleClient(int socket, ClientWorker *worker) {
 		int bytes_available;
 		ioctl(socket,FIONREAD,&bytes_available);
 		while (bytes_available == 0) {
-			time(&cur);
-			if (worker->finish_work || difftime(cur, worker->getLatestTime()) >= worker->getTimeout()) {
+			gettimeofday(&cur, NULL);
+			if (worker->finish_work || diff_millis(cur, worker->getLatestTime()) >= worker->getTimeout()) {
 				worker->finish_work = true;
 				close(socket);
 				return;
@@ -108,11 +144,13 @@ void handleClient(int socket, ClientWorker *worker) {
 			ioctl(socket,FIONREAD,&bytes_available);
 		}
 	}
+	worker->finish_work = true;
+	close(socket);
 }
 
 ClientWorker::ClientWorker(int socket, unsigned long timeOut) {
 	this->socket = socket;
-	std::time(&(this->time));
+	gettimeofday(&(this->time), NULL);
 	this->finish_work = false;
 	this->timeout = timeOut;
 }
@@ -124,10 +162,9 @@ void ClientWorker::start_serving() {
 void ClientWorker::kill_thread() {
 	this->finish_work = true;
 	this->thd.join();
-	close(this->socket);
 }
 
-time_t ClientWorker::getLatestTime() {
+struct timeval ClientWorker::getLatestTime() {
 	return this->time;
 }
 

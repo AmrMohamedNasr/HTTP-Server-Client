@@ -16,12 +16,12 @@
 
 using namespace std;
 
-string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size) {
+string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, bool status) {
 	char echoBuffer[size];
 	string request = string();
 	int recvMsgSize;
 	if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-		perror("recv() failed");
+		perror(("recv 1 () failed " + to_string(socket) + " " + to_string(status)).c_str());
 		return "";
 	}
 	string temp(echoBuffer);
@@ -30,7 +30,7 @@ string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size) {
 		request.append(echoBuffer);
 		memset(echoBuffer, 0, size);
 		if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-			perror("recv() failed");
+			perror("recv 2 () failed");
 			return "";
 		}
 		temp = string(echoBuffer);
@@ -49,7 +49,7 @@ string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size) {
 string recv_headers(int socket) {
 	char buff;
 	int d;
-	return recv_headers_chunk(socket, 1, &buff, &d);
+	return recv_headers_chunk(socket, 1, &buff, &d, 0);
 }
 
 string recv_data(int socket, int num_bytes) {

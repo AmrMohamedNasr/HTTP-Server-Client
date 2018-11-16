@@ -20,21 +20,25 @@
 using namespace std;
 
 #define RETRIES	3
-#define	MAX_CONNECTIONS	100
+#define	MAX_CONNECTIONS	1000
 #define TIMEOUT	120
-#define	MAX_WORKERS	100
+#define	MAX_WORKERS	16
 
 static vector<ClientWorker *> workers;
 
+inline int diff_millis(struct timeval t2, struct timeval t1) {
+	return (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec)/1000;
+}
+
 void clean_workers() {
-	time_t cur;
-	time(&cur);
+	struct timeval cur;
+	gettimeofday(&cur, NULL);
 	double k, max = 0;
 	ClientWorker *cli, *maxC = 0;
-	int maxI, items_removed = 0;
+	int maxI = -1, items_removed = 0;
 	for (int i = workers.size() - 1; i >= 0; i--) {
 		cli = workers[i];
-		k = difftime(cur, cli->getLatestTime());
+		k = diff_millis(cur, cli->getLatestTime());
 		if (cli->isFinished()) {
 			cli->kill_thread();
 			workers.erase(workers.begin() + i);
@@ -50,7 +54,7 @@ void clean_workers() {
 		}
 	}
 	if (workers.size() > MAX_WORKERS) {
-		if (maxC != 0) {
+		if (maxI != -1) {
 			maxC->kill_thread();
 			workers.erase(workers.begin() + maxI - items_removed);
 			delete maxC;
@@ -100,6 +104,10 @@ void Server::start_server(int port) {
 		cout << "Could not bind listening port. Ending program !" << endl;
 		return;
 	}
+	int enable = 1;
+	if (setsockopt(listenSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+		perror("setsockopt(SO_REUSEADDR) failed");
+	}
 	ntry = 0;
 	while((success = listen(listenSocket, MAX_CONNECTIONS)) < 0 && ntry < RETRIES) {
 		ntry++;
@@ -128,8 +136,11 @@ void Server::start_server(int port) {
 			cout << "Could not accept connection !" << endl;
 			break;
 		}
+		if (setsockopt(clientSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+		    perror("setsockopt(SO_REUSEADDR) failed");
+		}
 		//cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
-		ClientWorker * worker = new ClientWorker(clientSocket, TIMEOUT);
+		ClientWorker * worker = new ClientWorker(clientSocket, TIMEOUT * 1000);
 		workers.push_back(worker);
 		worker->start_serving();
 	}
