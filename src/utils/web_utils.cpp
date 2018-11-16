@@ -82,7 +82,7 @@ bool send_data(int socket, string data) {
 }
 
 bool send_data(int socket, void * data, int size) {
-	if (send(socket, data, size, 0) < 0) {
+	if ((send(socket, data, size, 0)) < 0) {
 		perror("Sending Data Error");
 		return false;
 	}

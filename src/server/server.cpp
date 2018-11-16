@@ -6,9 +6,6 @@
  */
 
 #include "server.h"
-#include "../file_system/file_handler.h"
-#include "../web_models/request.h"
-#include "../web_models/response.h"
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
@@ -18,91 +15,65 @@
 #include <thread>
 #include <unistd.h>
 #include <csignal>
-
-#include "../utils/string_utils.h"
-#include "../utils/web_utils.h"
+#include "client_worker.h"
 
 using namespace std;
 
 #define RETRIES	3
 #define	MAX_CONNECTIONS	100
-#define RCV_MSG_SIZE	128
+#define TIMEOUT	120
+#define	MAX_WORKERS	100
 
-void handleClient(int socket) {
-	string s;
-	char rem_data[RCV_MSG_SIZE];
-	int rem_size = 0;
-	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size)) != "") {
-		if (s.size() == 0) {
-			close(socket);
-			return;
-		}
-		Request r = Request(s);
-		cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
-		FileHandler handler = FileHandler();
-		if (r.getType() == GET) {
-			string rel_path = "." + r.getUrl();
-			if (handler.check_file(rel_path)) {
-				handler.set_read_file(rel_path);
-				Response res = Response(200, r.getProtocol(), "OK");
-				size_t file_bytes = handler.get_file_size(rel_path);
-				res.addHeader("Content-Length", to_string(file_bytes));
-				string res_s = res.format_response();
-				send_data(socket, res_s);
-				size_t bytes_sent = 0;
-				char buff[RCV_MSG_SIZE];
-				while (bytes_sent < file_bytes) {
-					size_t bytes_read_in = handler.read_chunk(RCV_MSG_SIZE, buff);
-					if (bytes_read_in == 0) {
-						break;
-					}
-					send_data(socket, buff, bytes_read_in);
-					bytes_sent += bytes_read_in;
-				}
-			} else {
-				Response res = Response(404, r.getProtocol(), "Not Found");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				send_data(socket, res_s);
-			}
+static vector<ClientWorker *> workers;
+
+void clean_workers() {
+	time_t cur;
+	time(&cur);
+	double k, max = 0;
+	ClientWorker *cli, *maxC = 0;
+	int maxI, items_removed = 0;
+	for (int i = workers.size() - 1; i >= 0; i--) {
+		cli = workers[i];
+		k = difftime(cur, cli->getLatestTime());
+		if (cli->isFinished()) {
+			cli->kill_thread();
+			workers.erase(workers.begin() + i);
+			items_removed++;
+			delete cli;
 		} else {
-			string rel_path = "." + r.getUrl();
-			if (!r.hasHeader("Content-Length")) {
-				Response res = Response(404, r.getProtocol(), "Not Found");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				send_data(socket, res_s);
-			} else {
-				size_t len_bytes = stoi(r.getHeaderValue("Content-Length"));
-				Response res = Response(200, r.getProtocol(), "OK");
-				res.addHeader("Content-Length", to_string(0));
-				string res_s = res.format_response();
-				send_data(socket, res_s);
-				handler.set_write_file(rel_path);
-				size_t bytes_recieved = rem_size;
-				handler.write_chunk(rem_data, rem_size);
-				char buff[RCV_MSG_SIZE];
-				while (bytes_recieved < len_bytes) {
-					streamsize data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
-					if (data_len == 0) {
-						break;
-					}
-					handler.write_chunk(buff, data_len);
-					bytes_recieved += data_len;
-				}
+			if (k > max) {
+				items_removed = 0;
+				maxI = i;
+				max = k;
+				maxC = cli;
 			}
 		}
 	}
-	close(socket);
+	if (workers.size() > MAX_WORKERS) {
+		if (maxC != 0) {
+			maxC->kill_thread();
+			workers.erase(workers.begin() + maxI - items_removed);
+			delete maxC;
+		}
+	}
+}
+
+void kill_workers() {
+	for (unsigned int i = workers.size() - 1; i >= 0; i--) {
+		workers[i]->kill_thread();
+		delete workers[i];
+	}
 }
 
 void my_handler(int s){
-	   printf("Caught signal %d\n",s);
-	   exit(1);
+	kill_workers();
+	printf("Closed Server%d\n",s);
+	exit(1);
 }
 
 void Server::start_server(int port) {
 	int ntry = 0;
+	workers = vector<ClientWorker *>();
 	int listenSocket;
 	while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
 		ntry++;
@@ -139,27 +110,28 @@ void Server::start_server(int port) {
 		cout << "Could not listen on port. Ending program !" << endl;
 		return;
 	}
-	 struct sigaction sigIntHandler;
+	struct sigaction sigIntHandler;
 
-   sigIntHandler.sa_handler = my_handler;
-   sigemptyset(&sigIntHandler.sa_mask);
-   sigIntHandler.sa_flags = 0;
+	sigIntHandler.sa_handler = my_handler;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
 
-   sigaction(SIGINT, &sigIntHandler, NULL);
+	sigaction(SIGINT, &sigIntHandler, NULL);
 	cout << "Port " << port << " is listening and ready." << endl;
 	struct sockaddr_in clientAddr;
 	unsigned int clientLen = sizeof(clientAddr);
 	int clientSocket;
-	vector<thread> working_threads;
 	for (;;) {
+		clean_workers();
 		if ((clientSocket = accept(listenSocket, (struct sockaddr *) &clientAddr,&clientLen)) < 0) {
 			perror("Socket Accepting");
 			cout << "Could not accept connection !" << endl;
 			break;
 		}
-		cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
-		thread worker(handleClient, clientSocket);
-		worker.detach();
+		//cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
+		ClientWorker * worker = new ClientWorker(clientSocket, TIMEOUT);
+		workers.push_back(worker);
+		worker->start_serving();
 	}
 	close(listenSocket);
 }
