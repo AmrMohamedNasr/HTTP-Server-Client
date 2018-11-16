@@ -82,22 +82,31 @@ bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first
 		return false;
 	}
 	first = true;
+
 	if (flag == "GET") {
+		int size = atoi(resp.getHeaderValue("Content-Length").c_str());
 		string data_string = recv_data(listenSocket,
 			atoi(resp.getHeaderValue("Content-Length").c_str()));
 		if (data_string == "") {
-			if (first && connect_server(listenSocket, serverAdd)) {
-				data_string = recv_data(listenSocket,
-						atoi(resp.getHeaderValue("Content-Length").c_str()));
-				if (data_string == "") {
-					perror("receive");
-					cout << "Could not receive from server. Ending program !" << endl;
-					return false;
+			perror("receive");
+			cout << "Could not receive from server. Ending program !" << endl;
+			return false;
+		} else {
+			int tries = 3;
+			while(tries != 0 && data_string.size() < size) {
+				int temp = data_string.size();
+				data_string += recv_data(listenSocket,
+						atoi(resp.getHeaderValue("Content-Length").c_str()) - data_string.size());
+				if (data_string.size() == temp) {
+					tries--;
 				}
-			} else {
+			}
+			if (tries == 0 && data_string.size() < size) {
 				perror("receive");
 				cout << "Could not receive from server. Ending program !" << endl;
 				return false;
+			} else if (data_string.size() == size) {
+				// TODO write to file
 			}
 		}
 		resp.setData(data_string);
