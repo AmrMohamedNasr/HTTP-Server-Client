@@ -26,6 +26,8 @@
 using namespace std;
 map <string, int> myConnections;
 vector <pair<int, struct sockaddr_in>> socket_map;
+
+
 bool connect_server(int listenSocket,struct sockaddr_in serverAdd ) {
 	int ntry = 0;
 	int success = -1;
@@ -103,6 +105,38 @@ bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first
 	return true;
 }
 
+void create_Socket(RequestAndPortNo req_data, int *listenSocket, struct sockaddr_in *serverAdd) {
+	struct in_addr * inAdd;
+	hostent * record;
+	Request req = req_data.getRequest();
+	if (!req.hasHeader("host")) {
+		cout << "Failed to fetch host name. Ending program !" << endl;
+		return;
+	} else {
+		record = gethostbyname(req.getHeaderValue("host").c_str());
+		inAdd = (struct in_addr *)record->h_addr_list[0];
+	}
+	string key = req.getHeaderValue("host").c_str() + to_string(req_data.getPortNo());
+	if (myConnections.find(req.getHeaderValue("host").c_str()) != myConnections.end()) {
+		*listenSocket = myConnections.find(key)->second;
+	} else {
+		int ntry = 0;
+		/* Create a reliable, stream socket using TCP */
+		while((*listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
+			ntry++;
+			cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
+		}
+
+		memset(serverAdd, 0 , sizeof(sockaddr_in));
+		serverAdd->sin_family = AF_INET;
+		serverAdd->sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
+		serverAdd->sin_port = htons(req_data.getPortNo());
+
+		connect_server(*listenSocket, *serverAdd);
+		myConnections.insert(pair<string, int>(key, *listenSocket));
+	}
+}
+
 
 void Client::start_client(int port, char *server_ip, string file) {
 	int listenSocket;
@@ -114,8 +148,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 	}
 	Request req;
 	struct sockaddr_in serverAdd;
-	struct in_addr * inAdd;
-	hostent * record;
+
 	while(parser.has_next()) {
 		RequestAndPortNo req_data = parser.next();
 		// request to be sent.
@@ -123,32 +156,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 		// format this request.
 		bool end = false;
 		while(!end && req.getType() == GET) {
-			if (!req.hasHeader("host")) {
-				cout << "Failed to fetch host name. Ending program !" << endl;
-				return;
-			} else {
-			 	 record = gethostbyname(req.getHeaderValue("host").c_str());
-			 	 inAdd = (struct in_addr *)record->h_addr_list[0];
-			}
-			string key = req.getHeaderValue("host").c_str() + to_string(req_data.getPortNo());
-			if (myConnections.find(req.getHeaderValue("host").c_str()) != myConnections.end()) {
-				listenSocket = myConnections.find(key)->second;
-			} else {
-				int ntry = 0;
-				/* Create a reliable, stream socket using TCP */
-				while((listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 && ntry < RETRIES) {
-					ntry++;
-					cout << "Failed to open listening port. Retrying again for " << ntry << " time of " << RETRIES << " retries !" << endl;
-				}
-
-				memset(&serverAdd, 0 , sizeof(sockaddr_in));
-				serverAdd.sin_family = AF_INET;
-				serverAdd.sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
-				serverAdd.sin_port = htons(req_data.getPortNo());
-
-				connect_server(listenSocket, serverAdd);
-				myConnections.insert(pair<string, int>(key, listenSocket));
-			}
+			create_Socket(req_data, &listenSocket, &serverAdd);
 			socket_map.push_back(pair<int, struct sockaddr_in>(listenSocket, serverAdd));
 			if (!send_message(listenSocket, serverAdd, req, true)) {
 				perror("send");
@@ -166,7 +174,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 		}
 		socket_map.clear();
 		if (req.getType() == POST) {
-
+			create_Socket(req_data, &listenSocket, &serverAdd);
 		}
 
 		if (!parser.has_next()) {
