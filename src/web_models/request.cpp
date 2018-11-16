@@ -39,9 +39,6 @@ Request::Request(string command) {
 		trim(request_words[1]);
 		this->headers[request_words[0]] = request_words[1];
 	}
-	for(; i < lines.size(); i++){
-		this->data += lines[i];
-	}
 }
 
 void Request::addHeader(string key, string value) {
