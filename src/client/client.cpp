@@ -65,11 +65,11 @@ bool send_message(int listenSocket, struct sockaddr_in serverAdd, Request req, b
 	return true;
 }
 
-bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first) {
+bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first, string flag) {
 	string resp_string = recv_headers(listenSocket);
 	if (resp_string == "") {
 		if (first && connect_server(listenSocket, serverAdd)) {
-			return receive_response(listenSocket, serverAdd, false);
+			return receive_response(listenSocket, serverAdd, false, flag);
 		}
 		perror("receive");
 		cout << "Could not receive from server. Ending program !" << endl;
@@ -82,25 +82,27 @@ bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first
 		return false;
 	}
 	first = true;
-	string data_string = recv_data(listenSocket,
+	if (flag == "GET") {
+		string data_string = recv_data(listenSocket,
 			atoi(resp.getHeaderValue("Content-Length").c_str()));
-	if (data_string == "") {
-		if (first && connect_server(listenSocket, serverAdd)) {
-			data_string = recv_data(listenSocket,
+		if (data_string == "") {
+			if (first && connect_server(listenSocket, serverAdd)) {
+				data_string = recv_data(listenSocket,
 						atoi(resp.getHeaderValue("Content-Length").c_str()));
-			if (data_string == "") {
+				if (data_string == "") {
+					perror("receive");
+					cout << "Could not receive from server. Ending program !" << endl;
+					return false;
+				}
+			} else {
 				perror("receive");
 				cout << "Could not receive from server. Ending program !" << endl;
 				return false;
 			}
-		} else {
-			perror("receive");
-			cout << "Could not receive from server. Ending program !" << endl;
-			return false;
 		}
+		resp.setData(data_string);
+		// TODO write to file
 	}
-	resp.setData(data_string);
-	// TODO write to file
 	cout << resp.format_response() << endl;
 	return true;
 }
@@ -161,6 +163,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 			if (!send_message(listenSocket, serverAdd, req, true)) {
 				perror("send");
 				cout << "request not sent" << endl;
+				return;
 			}
 			if (parser.has_next()) {
 				req_data = parser.next();
@@ -170,11 +173,21 @@ void Client::start_client(int port, char *server_ip, string file) {
 			}
 		}
 		for(int i=0;i<socket_map.size();i++) {
-			receive_response(socket_map[i].first, socket_map[i].second, true);
+			if (!receive_response(socket_map[i].first, socket_map[i].second, true, "GET")) {
+				perror("receive");
+				cout << "response not received from server" << endl;
+				return;
+			}
 		}
 		socket_map.clear();
-		if (req.getType() == POST) {
+		if (!end && req.getType() == POST) {
 			create_Socket(req_data, &listenSocket, &serverAdd);
+			if (!send_message(listenSocket, serverAdd, req, true)) {
+				perror("send");
+				cout << "request not sent to server" << endl;
+				return;
+			}
+			receive_response(listenSocket, serverAdd, true, "POST");
 		}
 
 		if (!parser.has_next()) {
