@@ -9,6 +9,6 @@ class BatchParser {
 	public:
 		bool read_input(string file);
 		bool has_next();
-		Request next();
+		RequestAndPortNo next();
 };
 #endif

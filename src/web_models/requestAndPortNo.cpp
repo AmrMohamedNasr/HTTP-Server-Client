@@ -12,3 +12,12 @@ RequestAndPortNo::RequestAndPortNo(Request req , int portNo) {
 	this->portNo = portNo;
 }
 
+Request RequestAndPortNo::getRequest() {
+	return this->request;
+}
+
+int RequestAndPortNo::getPortNo() {
+	return this->portNo;
+}
+
+

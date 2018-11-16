@@ -7,4 +7,6 @@ class RequestAndPortNo {
 	public:
 		RequestAndPortNo(Request req);
 		RequestAndPortNo(Request req,int portNo);
+		Request getRequest();
+		int getPortNo();
 };

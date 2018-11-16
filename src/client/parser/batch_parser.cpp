@@ -52,8 +52,8 @@ bool BatchParser::has_next() {
 	return !(requests.empty());
 }
 
-Request BatchParser::next() {
-	Request req = requests.front();
+RequestAndPortNo BatchParser::next() {
+	RequestAndPortNo req = requests.front();
 	requests.erase(requests.begin());
 	return req;
 }

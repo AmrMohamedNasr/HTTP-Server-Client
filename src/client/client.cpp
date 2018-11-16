@@ -39,8 +39,9 @@ void send_message(int listenSocket, Request req ) {
 		cout << "Could not send to server. Ending program !" << endl;
 		return;
 	}
+}
 
-
+void receive_response(int listenSocket) {
 	string resp_string = recv_headers(listenSocket);
 	if (resp_string == "") {
 		perror("receive");
@@ -57,7 +58,6 @@ void send_message(int listenSocket, Request req ) {
 			atoi(resp.getHeaderValue("Content-Length").c_str()));
 	resp.setData(data_string);
 	cout << resp.format_response() << endl;
-
 }
 
 
@@ -75,8 +75,9 @@ void Client::start_client(int port, char *server_ip, string file) {
 	struct in_addr * inAdd;
 	hostent * record;
 	while(parser.has_next()) {
+		RequestAndPortNo req_data = parser.next();
 		// request to be sent.
-		req = parser.next();
+		req = req_data.getRequest();
 		// format this request.
 		if (!req.hasHeader("host")) {
 			cout << "Failed to fetch host name. Ending program !" << endl;
@@ -99,8 +100,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 			memset(&serverAdd, 0 , sizeof(sockaddr_in));
 			serverAdd.sin_family = AF_INET;
 			serverAdd.sin_addr.s_addr = inet_addr(inet_ntoa((*inAdd)));
-			//TODO port number should be given with request using a map.
-			serverAdd.sin_port = htons(port);
+			serverAdd.sin_port = htons(req_data.getPortNo());
 			ntry = 0;
 			int success = -1;
 
