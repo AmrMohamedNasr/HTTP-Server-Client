@@ -150,8 +150,10 @@ void Client::start_client(int port, char *server_ip, string file) {
 				myConnections.insert(pair<string, int>(key, listenSocket));
 			}
 			socket_map.push_back(pair<int, struct sockaddr_in>(listenSocket, serverAdd));
-			send_message(listenSocket, serverAdd, req, true);
-			receive_response(listenSocket, serverAdd, true);
+			if (!send_message(listenSocket, serverAdd, req, true)) {
+				perror("send");
+				cout << "request not sent" << endl;
+			}
 			if (parser.has_next()) {
 				req_data = parser.next();
 				req = req_data.getRequest();
@@ -159,11 +161,11 @@ void Client::start_client(int port, char *server_ip, string file) {
 				end = true;
 			}
 		}
+		for(int i=0;i<socket_map.size();i++) {
+			receive_response(socket_map[i].first, socket_map[i].second, true);
+		}
+		socket_map.clear();
 		if (req.getType() == POST) {
-			for(int i=0;i<socket_map.size();i++) {
-				receive_response(socket_map[i].first, socket_map[i].second, true);
-			}
-			socket_map.clear();
 
 		}
 
