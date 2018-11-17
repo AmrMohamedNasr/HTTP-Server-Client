@@ -199,3 +199,5 @@ CMakeLists\.txt
 /*.html
 /*.jpg
 /w3images/
+/Client/
+/Release/

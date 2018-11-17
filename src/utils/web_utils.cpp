@@ -17,34 +17,39 @@
 using namespace std;
 
 string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, bool status) {
-	char echoBuffer[size];
-	string request = string();
-	int recvMsgSize;
-	if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-		perror(("recv 1 () failed " + to_string(socket) + " " + to_string(status)).c_str());
-		return "";
-	}
-	string temp(echoBuffer);
-	string d = "\r\n\r\n";
-	while (!ends_with(request + temp, d) && temp.rfind(d) == string::npos && recvMsgSize > 0) {
-		request.append(echoBuffer);
+	char echoBuffer[size + 1];
 		memset(echoBuffer, 0, size);
+		string request = string();
+		int recvMsgSize;
 		if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-			perror("recv 2 () failed");
+			perror(("recv 1 () failed " + to_string(socket) + " " + to_string(status)).c_str());
 			return "";
 		}
-		temp = string(echoBuffer);
-	}
-	size_t found = temp.rfind(d);
-	if (found == string::npos) {
-		request.append(temp);
-		*rem_size = 0;
-	} else {
-		request.append(temp.substr(0, found + d.size()));
-		memcpy(rem_data, echoBuffer + found + d.size(), recvMsgSize - found - d.size());
-		*rem_size = recvMsgSize - found - d.size();
-	}
-	return request;
+		echoBuffer[size] = '\0';
+		string temp(echoBuffer);
+		string d = "\r\n\r\n";
+		string k;
+		while (!ends_with(k, d) && k.rfind(d) == string::npos && recvMsgSize > 0) {
+			request.append(echoBuffer);
+			memset(echoBuffer, 0, size);
+			if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
+				perror("recv 2 () failed");
+				return "";
+			}
+			echoBuffer[size] = '\0';
+			temp = string(echoBuffer);
+			k = request + temp;
+		}
+		size_t found = k.rfind(d);
+		if (found == string::npos) {
+			request.append(temp);
+			*rem_size = 0;
+		} else {
+			memcpy(rem_data, echoBuffer + found - request.size() + d.size(), recvMsgSize - found + request.size() - d.size());
+			*rem_size = recvMsgSize - found + request.size() - d.size();
+			request = k.substr(0, found + d.size());
+		}
+		return request;
 }
 string recv_headers(int socket) {
 	char buff;
