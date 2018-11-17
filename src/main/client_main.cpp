@@ -11,10 +11,13 @@ int main(int argc, char** argv) {
 				cout << "Invalid port number. Must be a valid port number !" << endl;
 				return 0;
 			}
+			string file;
+			cout << "Enter File path to read requests: " << endl;
+			cin >> file;
 			int port = atoi(argv[2]);
 			char *server_ip = argv[1];
 			Client client;
-			client.start_client(port, server_ip);
+			client.start_client(port, server_ip, file);
 		} else {
 			cout << "Invalid command. Should be called like this \"" << argv[0] << " <server ip> <port number> \"" << endl;
 		}

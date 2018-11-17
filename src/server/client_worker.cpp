@@ -35,7 +35,8 @@ void handleClient(int socket, ClientWorker *worker) {
 	char rem_data[RCV_MSG_SIZE];
 	int rem_size = 0;
 	struct timeval cur;
-	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size, worker->isFinished())) != "") {
+	string rem_header_data = "";
+	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size, rem_header_data)) != "") {
 		gettimeofday(&worker->time, NULL);
 		if (s.size() == 0) {
 			close(socket);
@@ -93,6 +94,11 @@ void handleClient(int socket, ClientWorker *worker) {
 					return;
 				}
 			}
+			if (rem_size > 0) {
+				rem_header_data = string(rem_data);
+			} else {
+				rem_header_data = "";
+			}
 		} else {
 			string rel_path = "." + r.getUrl();
 			if (!r.hasHeader("Content-Length")) {
@@ -121,7 +127,8 @@ void handleClient(int socket, ClientWorker *worker) {
 				handler.write_chunk(rem_data, rem_size);
 				char buff[RCV_MSG_SIZE];
 				while (bytes_recieved < len_bytes) {
-					streamsize data_len = recv_data_bytes(socket, RCV_MSG_SIZE, buff);
+					size_t ask_for = len_bytes - bytes_recieved < RCV_MSG_SIZE ? len_bytes - bytes_recieved : RCV_MSG_SIZE;
+					streamsize data_len = recv_data_bytes(socket, ask_for, buff);
 					if (data_len == 0) {
 						worker->finish_work = true;
 						close(socket);
@@ -131,10 +138,11 @@ void handleClient(int socket, ClientWorker *worker) {
 					bytes_recieved += data_len;
 				}
 			}
+			rem_header_data = "";
 		}
 		int bytes_available;
 		ioctl(socket,FIONREAD,&bytes_available);
-		while (bytes_available == 0) {
+		while (bytes_available == 0 && rem_header_data == "") {
 			gettimeofday(&cur, NULL);
 			if (worker->finish_work || diff_millis(cur, worker->getLatestTime()) >= worker->getTimeout()) {
 				worker->finish_work = true;

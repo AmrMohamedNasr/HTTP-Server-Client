@@ -19,6 +19,7 @@ class Response {
 	public:
 		Response();
 		Response(int code, PROTOCOL proto, string messageCode);
+		Response(string command);
 		bool hasHeader(string key);
 		string getHeaderValue(string key);
 		void addHeader(string key, string value);
