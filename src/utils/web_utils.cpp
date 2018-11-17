@@ -16,45 +16,47 @@
 
 using namespace std;
 
-string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, bool status) {
+string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, string last_time_buffered) {
 	char echoBuffer[size + 1];
-		memset(echoBuffer, 0, size);
-		string request = string();
-		int recvMsgSize;
+	memset(echoBuffer, 0, size);
+	string request = last_time_buffered;
+	string d = "\r\n\r\n";
+	int recvMsgSize = 0;
+	if (!ends_with(last_time_buffered, d) && last_time_buffered.find(d) == string::npos) {
 		if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-			perror(("recv 1 () failed " + to_string(socket) + " " + to_string(status)).c_str());
+			perror(("recv 1 () failed " + to_string(socket)).c_str() );
+			return "";
+		}
+	}
+	echoBuffer[size] = '\0';
+	string temp(echoBuffer);
+	string k = request + temp;
+	while (!ends_with(k, d) && k.find(d) == string::npos && recvMsgSize > 0) {
+		request.append(echoBuffer);
+		memset(echoBuffer, 0, size);
+		if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
+			perror("recv 2 () failed");
 			return "";
 		}
 		echoBuffer[size] = '\0';
-		string temp(echoBuffer);
-		string d = "\r\n\r\n";
-		string k;
-		while (!ends_with(k, d) && k.rfind(d) == string::npos && recvMsgSize > 0) {
-			request.append(echoBuffer);
-			memset(echoBuffer, 0, size);
-			if ((recvMsgSize = recv(socket, echoBuffer, size, 0)) < 0) {
-				perror("recv 2 () failed");
-				return "";
-			}
-			echoBuffer[size] = '\0';
-			temp = string(echoBuffer);
-			k = request + temp;
-		}
-		size_t found = k.rfind(d);
-		if (found == string::npos) {
-			request.append(temp);
-			*rem_size = 0;
-		} else {
-			memcpy(rem_data, echoBuffer + found - request.size() + d.size(), recvMsgSize - found + request.size() - d.size());
-			*rem_size = recvMsgSize - found + request.size() - d.size();
-			request = k.substr(0, found + d.size());
-		}
-		return request;
+		temp = string(echoBuffer);
+		k = request + temp;
+	}
+	size_t found = k.find(d);
+	if (found == string::npos) {
+		request.append(temp);
+		*rem_size = 0;
+	} else {
+		memcpy(rem_data, echoBuffer + found - request.size() + d.size(), recvMsgSize - found + request.size() - d.size());
+		*rem_size = recvMsgSize - found + request.size() - d.size();
+		request = k.substr(0, found + d.size());
+	}
+	return request;
 }
 string recv_headers(int socket) {
 	char buff;
 	int d;
-	return recv_headers_chunk(socket, 1, &buff, &d, 0);
+	return recv_headers_chunk(socket, 1, &buff, &d, "");
 }
 
 string recv_data(int socket, int num_bytes) {
