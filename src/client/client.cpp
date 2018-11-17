@@ -41,7 +41,6 @@ bool connect_server(int listenSocket,struct sockaddr_in serverAdd ) {
 		cout << "Could not connect to server. Ending program !" << endl;
 		return false;
 	}
-	cout << " is connected to server and ready." << endl;
 	return true;
 }
 bool send_message(int listenSocket, struct sockaddr_in serverAdd, Request req, bool first ) {
@@ -119,6 +118,7 @@ void create_Socket(int * listenSocket, struct sockaddr_in *serverAdd, int port, 
 	serverAdd->sin_port = htons(port);
 
 	connect_server(*listenSocket, *serverAdd);
+	cout << "new Connection is established " + key << endl;
 	myConnections.insert(pair<string, int>(key, *listenSocket));
 }
 
@@ -133,9 +133,11 @@ void get_Socket(RequestAndPortNo req_data, int *listenSocket, struct sockaddr_in
 		record = gethostbyname(req.getHeaderValue("host").c_str());
 		inAdd = (struct in_addr *)record->h_addr_list[0];
 	}
-	string key = req.getHeaderValue("host") + ":" + to_string(req_data.getPortNo());
+	string ip(inet_ntoa((*inAdd)));
+	string key = ip + ":" + to_string(req_data.getPortNo());
 	bool create_new = true;
 	if (myConnections.find(key) != myConnections.end()) {
+
 		*listenSocket = myConnections.find(key)->second;
 		create_new = false;
 	}
