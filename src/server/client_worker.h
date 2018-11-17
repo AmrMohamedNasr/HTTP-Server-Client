@@ -11,6 +11,7 @@
 #include <ctime>
 #include <thread>
 #include <sys/time.h>
+#include <mutex>
 
 using namespace std;
 
@@ -22,6 +23,8 @@ class ClientWorker {
 	public:
 		struct timeval time;
 		volatile bool finish_work;
+		volatile bool wait_for_job;
+		mutex close_seq;
 		ClientWorker(int socket, unsigned long timeout);
 		void start_serving();
 		void kill_thread();

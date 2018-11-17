@@ -30,20 +30,29 @@ inline int diff_millis(struct timeval t2, struct timeval t1) {
 	return (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec)/1000;
 }
 
+void closing_clean(int socket, ClientWorker *worker) {
+	worker->close_seq.lock();
+	if (!worker->wait_for_job) {
+		worker->finish_work = true;
+		shutdown(socket, SHUT_RDWR);
+	}
+	worker->close_seq.unlock();
+}
+
 void handleClient(int socket, ClientWorker *worker) {
 	string s;
 	char rem_data[RCV_MSG_SIZE];
 	int rem_size = 0;
-	struct timeval cur;
 	string rem_header_data = "";
 	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size, rem_header_data)) != "") {
 		gettimeofday(&worker->time, NULL);
 		if (s.size() == 0) {
-			close(socket);
+			closing_clean(socket,worker);
 			return;
 		}
 		Request r = Request(s);
-		cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
+		//cout << r.format_request();
+		//cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
 		FileHandler handler = FileHandler();
 		if (r.getType() == GET) {
 			string rel_path = "." + r.getUrl();
@@ -79,8 +88,7 @@ void handleClient(int socket, ClientWorker *worker) {
 				std::string str((std::istreambuf_iterator<char>(t)),
 				                 std::istreambuf_iterator<char>());
 				if (!send_data(socket, res_s + str)) {
-					worker->finish_work = true;
-					close(socket);
+					closing_clean(socket,worker);
 					return;
 				}
 			} else {
@@ -89,8 +97,7 @@ void handleClient(int socket, ClientWorker *worker) {
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
 				if (!send_data(socket, res_s)) {
-					worker->finish_work = true;
-					close(socket);
+					closing_clean(socket,worker);
 					return;
 				}
 			}
@@ -107,8 +114,7 @@ void handleClient(int socket, ClientWorker *worker) {
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
 				if (!send_data(socket, res_s)) {
-					worker->finish_work = true;
-					close(socket);
+					closing_clean(socket,worker);
 					return;
 				}
 			} else {
@@ -118,8 +124,7 @@ void handleClient(int socket, ClientWorker *worker) {
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();
 				if (!send_data(socket, res_s)) {
-					worker->finish_work = true;
-					close(socket);
+					closing_clean(socket,worker);
 					return;
 				}
 				handler.set_write_file(rel_path);
@@ -130,8 +135,7 @@ void handleClient(int socket, ClientWorker *worker) {
 					size_t ask_for = len_bytes - bytes_recieved < RCV_MSG_SIZE ? len_bytes - bytes_recieved : RCV_MSG_SIZE;
 					streamsize data_len = recv_data_bytes(socket, ask_for, buff);
 					if (data_len == 0) {
-						worker->finish_work = true;
-						close(socket);
+						closing_clean(socket,worker);
 						return;
 					}
 					handler.write_chunk(buff, data_len);
@@ -140,20 +144,50 @@ void handleClient(int socket, ClientWorker *worker) {
 			}
 			rem_header_data = "";
 		}
+		/*
 		int bytes_available;
 		ioctl(socket,FIONREAD,&bytes_available);
 		while (bytes_available == 0 && rem_header_data == "") {
 			gettimeofday(&cur, NULL);
 			if (worker->finish_work || diff_millis(cur, worker->getLatestTime()) >= worker->getTimeout()) {
 				worker->finish_work = true;
-				close(socket);
 				return;
 			}
 			ioctl(socket,FIONREAD,&bytes_available);
+		}*/
+		if (rem_header_data == "") {
+			worker->close_seq.lock();
+			if (worker->finish_work) {
+				shutdown(socket, SHUT_RDWR);
+				worker->close_seq.unlock();
+				return;
+			}
+			struct timeval tv;
+			tv.tv_sec = worker->getTimeout() / 1000;
+			tv.tv_usec = (((int)worker->getTimeout()) % 1000) * 1000;
+			if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) < 0) {
+				worker->finish_work = true;
+				shutdown(socket, SHUT_RDWR);
+				worker->close_seq.unlock();
+				return;
+			}
+			char c;
+			int ret_va;
+			worker->wait_for_job = true;
+			worker->close_seq.unlock();
+			if ((ret_va = recv(socket, &c, 1, MSG_PEEK)) <= 0) {
+				worker->close_seq.lock();
+				worker->wait_for_job = false;
+				worker->close_seq.unlock();
+				closing_clean(socket, worker);
+				return;
+			}
+			worker->close_seq.lock();
+			worker->wait_for_job = false;
+			worker->close_seq.unlock();
 		}
 	}
-	worker->finish_work = true;
-	close(socket);
+	closing_clean(socket, worker);
 }
 
 ClientWorker::ClientWorker(int socket, unsigned long timeOut) {
@@ -164,12 +198,24 @@ ClientWorker::ClientWorker(int socket, unsigned long timeOut) {
 }
 
 void ClientWorker::start_serving() {
+	this->wait_for_job = false;
+	this->finish_work = false;
 	this->thd = thread(handleClient, this->socket, this);
 }
 
 void ClientWorker::kill_thread() {
+	this->close_seq.lock();
+	if (this->wait_for_job) {
+		int bytes_available;
+		ioctl(this->socket,FIONREAD,&bytes_available);
+		if (bytes_available == 0) {
+			shutdown(this->socket, SHUT_RDWR);
+		}
+	}
 	this->finish_work = true;
+	this->close_seq.unlock();
 	this->thd.join();
+	close(this->socket);
 }
 
 struct timeval ClientWorker::getLatestTime() {
