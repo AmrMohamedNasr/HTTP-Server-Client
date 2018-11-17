@@ -196,6 +196,7 @@ CMakeLists\.txt
 /.cproject
 /Server/
 /Debug/
+/server/
 /*.html
 /*.jpg
 /w3images/
