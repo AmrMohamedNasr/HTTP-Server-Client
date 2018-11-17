@@ -197,3 +197,5 @@ CMakeLists\.txt
 /Server/
 /Debug/
 /server/
+/Client/
+/Release/
