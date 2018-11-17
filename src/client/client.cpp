@@ -69,7 +69,7 @@ bool send_message(int listenSocket, struct sockaddr_in serverAdd, Request req, b
 bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first, string flag, Request req, int *code) {
 	char rem_data[RCVBUFSIZE];
 	int rem_size = 0;
-	string resp_string = recv_headers_chunk(listenSocket, RCVBUFSIZE, rem_data, &rem_size, 0);
+	string resp_string = recv_headers_chunk(listenSocket, RCVBUFSIZE, rem_data, &rem_size, "");
 	if (resp_string == "") {
 		if (first && connect_server(listenSocket, serverAdd)) {
 			return receive_response(listenSocket, serverAdd, false, flag, req,code);
