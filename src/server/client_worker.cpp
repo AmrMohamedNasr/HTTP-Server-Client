@@ -51,7 +51,7 @@ void handleClient(int socket, ClientWorker *worker) {
 			return;
 		}
 		Request r = Request(s);
-		//cout << r.format_request();
+		cout << r.format_request();
 		//cout << request_to_string(r.getType()) << " " << r.getUrl() << " " << protocol_to_string(r.getProtocol()) << endl;
 		FileHandler handler = FileHandler();
 		if (r.getType() == GET) {
