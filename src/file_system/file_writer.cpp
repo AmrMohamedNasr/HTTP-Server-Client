@@ -5,8 +5,16 @@
  *      Author: amrnasr
  */
 #include "file_writer.h"
+#include <libgen.h>
+#include <sys/stat.h>
+#include <cstring>
 
 void FileWriter::set_file(string path) {
+	char pathC[path.size() + 1];
+	memcpy(pathC, path.c_str(), (size_t)path.size());
+	pathC[path.size()] = '\0';
+	char * pathOnly = dirname(pathC);
+	mkdir(pathOnly, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	this->ofs = ofstream(path);
 }
 
