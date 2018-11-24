@@ -19,6 +19,8 @@ using namespace std;
 string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, string last_time_buffered) {
 	char echoBuffer[size + 1];
 	memset(echoBuffer, 0, size);
+	*rem_size = 0;
+	memset(rem_data, 0, size);
 	string request = last_time_buffered;
 	string d = "\r\n\r\n";
 	int recvMsgSize = 0;
@@ -27,8 +29,14 @@ string recv_headers_chunk(int socket, int size, char *rem_data, int *rem_size, s
 			perror(("recv 1 () failed " + to_string(socket)).c_str() );
 			return "";
 		}
+		echoBuffer[size] = '\0';
+	} else if (last_time_buffered.find(d) != string::npos){
+		size_t pos = last_time_buffered.find(d);
+		string rest_of_request = last_time_buffered.substr(pos + d.size());
+		request = last_time_buffered.substr(0, pos + d.size());
+		memcpy(echoBuffer, rest_of_request.c_str(), rest_of_request.size());
+		recvMsgSize = rest_of_request.size();
 	}
-	echoBuffer[size] = '\0';
 	string temp(echoBuffer);
 	string k = request + temp;
 	while (!ends_with(k, d) && k.find(d) == string::npos && recvMsgSize > 0) {

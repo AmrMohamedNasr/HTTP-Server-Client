@@ -22,7 +22,7 @@ using namespace std;
 #define RETRIES	3
 #define	MAX_CONNECTIONS	1000
 #define TIMEOUT	120
-#define	MAX_WORKERS	100
+#define	MAX_WORKERS	500
 
 static vector<ClientWorker *> workers;
 
