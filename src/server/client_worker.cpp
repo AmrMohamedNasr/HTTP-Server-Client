@@ -120,7 +120,7 @@ void handleClient(int socket, ClientWorker *worker) {
 		} else {
 			string rel_path = "." + r.getUrl();
 			if (!r.hasHeader("Content-Length")) {
-				Response res = Response(404, r.getProtocol(), "Not Found");
+				Response res = Response(400, r.getProtocol(), "Bad Request");
 				res.addHeader("Content-Length", to_string(0));
 				res.addHeader("Connection", "Keep-Alive");
 				string res_s = res.format_response();

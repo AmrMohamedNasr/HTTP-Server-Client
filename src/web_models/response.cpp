@@ -37,7 +37,14 @@ Response::Response(string command) {
 		this->protocol = HTTP1_1;
 	}
 	this->statusCode = atoi(request_words[1].c_str());
-	this->statusMessage = request_words[2];
+	string msg = "";
+	for (int i = 2; i < request_words.size(); i++) {
+		msg += request_words[i];
+		if (i != request_words.size() - 1) {
+			msg += " ";
+		}
+	}
+	this->statusMessage = msg;
 	unsigned int i = 1;
 	for (; i < lines.size() && lines[i] != "\r\n"; i++) {
 		request_words = split_string(lines[i], ":", 2);

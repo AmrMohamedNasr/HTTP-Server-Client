@@ -24,6 +24,7 @@
 
 #define RETRIES 3
 #define RCVBUFSIZE 32
+#define LIMIT_PIPE	20
 using namespace std;
 map <string, int> myConnections;
 vector <pair<int, struct sockaddr_in>> socket_map;
@@ -84,7 +85,7 @@ bool receive_response(int listenSocket, struct sockaddr_in serverAdd, bool first
 		return false;
 	}
 	first = true;
-	if (flag == "GET") {
+	if (flag == "GET" && resp.getStatusCode() == 200) {
 		FileHandler fileHandler = FileHandler();
 		fileHandler.set_write_file("." + req.getUrl());
 		size_t size = atoi(resp.getHeaderValue("Content-Length").c_str());
@@ -167,6 +168,7 @@ void Client::start_client(int port, char *server_ip, string file) {
 		vector<Request> reqs;
 		// format this request.
 		bool end = false;
+		int req_sent_num = 0;
 		while(!end && req.getType() == GET) {
 			get_Socket(req_data, &listenSocket, &serverAdd);
 			reqs.push_back(req_data.getRequest());
@@ -177,6 +179,20 @@ void Client::start_client(int port, char *server_ip, string file) {
 				return;
 			}
 			cout << "GET " << req.getUrl() << endl;
+			req_sent_num++;
+			if (req_sent_num == LIMIT_PIPE) {
+				int code;
+				for (unsigned int i=0;i<socket_map.size();i++) {
+					if (!receive_response(socket_map[i].first, socket_map[i].second, true, "GET", reqs[i], &code)) {
+						perror("receive");
+						cout << "response not received from server" << endl;
+						return;
+					}
+				}
+				socket_map.clear();
+				reqs.clear();
+				req_sent_num = 0;
+			}
 			if (parser.has_next()) {
 				req_data = parser.next();
 				req = req_data.getRequest();
