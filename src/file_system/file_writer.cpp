@@ -8,13 +8,32 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <cstring>
+#include <climits>
+
+static void _mkdir(const char *dir) {
+        char tmp[PATH_MAX];
+        char *p = NULL;
+        size_t len;
+
+        snprintf(tmp, sizeof(tmp),"%s",dir);
+        len = strlen(tmp);
+        if(tmp[len - 1] == '/')
+                tmp[len - 1] = 0;
+        for(p = tmp + 1; *p; p++)
+                if(*p == '/') {
+                        *p = 0;
+                        mkdir(tmp, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+                        *p = '/';
+                }
+        mkdir(tmp, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+}
 
 void FileWriter::set_file(string path) {
 	char pathC[path.size() + 1];
 	memcpy(pathC, path.c_str(), (size_t)path.size());
 	pathC[path.size()] = '\0';
 	char * pathOnly = dirname(pathC);
-	mkdir(pathOnly, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	_mkdir(pathOnly);
 	this->ofs = ofstream(path);
 }
 
