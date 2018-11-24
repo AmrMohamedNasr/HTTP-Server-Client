@@ -22,7 +22,7 @@ using namespace std;
 #define RETRIES	3
 #define	MAX_CONNECTIONS	1000
 #define TIMEOUT	120
-#define	MAX_WORKERS	16
+#define	MAX_WORKERS	100
 
 static vector<ClientWorker *> workers;
 
@@ -65,6 +65,12 @@ void clean_workers() {
 void my_handler(int s) {
 	printf("\nClosed Server\n");
 	exit(0);
+}
+
+void update_timeouts(unsigned long timeout) {
+	for (unsigned int i = 0; i < workers.size(); i++) {
+		workers[i]->setTimeout(timeout);
+	}
 }
 
 void Server::start_server(int port) {
@@ -122,7 +128,6 @@ void Server::start_server(int port) {
 	unsigned int clientLen = sizeof(clientAddr);
 	int clientSocket;
 	for (;;) {
-		clean_workers();
 		if ((clientSocket = accept(listenSocket, (struct sockaddr *) &clientAddr,&clientLen)) < 0) {
 			perror("Socket Accepting");
 			cout << "Could not accept connection !" << endl;
@@ -131,8 +136,11 @@ void Server::start_server(int port) {
 		if (setsockopt(clientSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
 		    perror("setsockopt(SO_REUSEADDR) failed");
 		}
+		clean_workers();
 		//cout << "Handling client " <<  inet_ntoa(clientAddr.sin_addr) << " " << clientSocket << endl;
-		ClientWorker * worker = new ClientWorker(clientSocket, TIMEOUT * 1000);
+		unsigned long new_timeout = (TIMEOUT * 1000) / (workers.size() + 1);
+		ClientWorker * worker = new ClientWorker(clientSocket, new_timeout);
+		update_timeouts(new_timeout);
 		workers.push_back(worker);
 		worker->start_serving();
 	}

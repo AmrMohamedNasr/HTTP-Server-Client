@@ -30,6 +30,7 @@ class ClientWorker {
 		void kill_thread();
 		struct timeval getLatestTime();
 		double getTimeout();
+		void setTimeout(double tmeOut);
 		bool isFinished();
 		int getSocket() {
 			return socket;

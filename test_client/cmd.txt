@@ -3,3 +3,4 @@ GET /index.html localhost 1025
 GET /pic_trulli.jpg localhost 1025
 POST /test.txt localhost 1025
 POST /paris.jpg localhost 1025
+POST /test_folder/paris.jpg localhost 1025

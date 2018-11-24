@@ -44,6 +44,17 @@ void handleClient(int socket, ClientWorker *worker) {
 	char rem_data[RCV_MSG_SIZE];
 	int rem_size = 0;
 	string rem_header_data = "";
+	struct timeval tvv;
+	tvv.tv_sec = worker->getTimeout() / 1000;
+	tvv.tv_usec = (((int)worker->getTimeout()) % 1000) * 1000;
+	if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tvv, sizeof tvv) < 0) {
+		closing_clean(socket, worker);
+		return;
+	}
+	if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tvv, sizeof tvv) < 0) {
+		closing_clean(socket, worker);
+		return;
+	}
 	while ((s = recv_headers_chunk(socket, RCV_MSG_SIZE, rem_data, &rem_size, rem_header_data)) != "") {
 		gettimeofday(&worker->time, NULL);
 		if (s.size() == 0) {
@@ -171,6 +182,12 @@ void handleClient(int socket, ClientWorker *worker) {
 				worker->close_seq.unlock();
 				return;
 			}
+			if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof tv) < 0) {
+				worker->finish_work = true;
+				shutdown(socket, SHUT_RDWR);
+				worker->close_seq.unlock();
+				return;
+			}
 			char c;
 			int ret_va;
 			worker->wait_for_job = true;
@@ -188,6 +205,9 @@ void handleClient(int socket, ClientWorker *worker) {
 		}
 	}
 	closing_clean(socket, worker);
+}
+void ClientWorker::setTimeout(double tmeOut) {
+	this->timeout = tmeOut;
 }
 
 ClientWorker::ClientWorker(int socket, unsigned long timeOut) {
