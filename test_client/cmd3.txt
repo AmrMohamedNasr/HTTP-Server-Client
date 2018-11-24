@@ -16,6 +16,15 @@ GET /pic_trulli.jpg localhost 1025
 GET /a.html localhost 1025
 GET /index.html localhost 1025
 GET /pic_trulli.jpg localhost 1025
+GET /a.html localhost 1025
+GET /index.html localhost 1025
+GET /pic_trulli.jpg localhost 1025
+GET /a.html localhost 1025
+GET /index.html localhost 1025
+GET /pic_trulli.jpg localhost 1025
+GET /a.html localhost 1025
+GET /index.html localhost 1025
+GET /pic_trulli.jpg localhost 1025
 POST /paris.jpg localhost 1025
 POST /test.txt 127.0.0.1 1025
 POST /folder1/folder2/paris.jpg localhost 1025
