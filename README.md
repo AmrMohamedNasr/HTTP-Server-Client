@@ -86,9 +86,14 @@ wrapping a request and it’s port number.
 
 ---
 ### Evaluation
+
 Mean time to serve a request :
+
 ![Mean time per request curve](./mt_graph.png)
+
+
 Mean time to serve requests with conccurency taken into account :
+
 ![Mean time per conccurent request curve](./mt_c_graph.png)
 
 
