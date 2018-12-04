@@ -1,6 +1,6 @@
 # Overview
 
-1. Implementation of an HTTP server and client using TCP sockets in C++.
+1. Implementation of an HTTP server and client using TCP sockets in C++(Supports HTTP/1.0 & HTTP/1.1).
 2. It supports get request(which sends to the client a file from the server) & post (From client to server).
 3. It supports concurrent clients, persistent connections and timeouts.
 4. It will write the file received URL path from the request upon reception of a response.
@@ -84,6 +84,11 @@ wrapping a request and it’s port number.
     4- timeout starts with 2 minute interval, reduces with each client.
     5- no busy wait, blocked wait until timeout or shutdown.
 
-
+---
+### Evaluation
+Mean time to serve a request :
+![Mean time per request curve](./mt_graph.png)
+Mean time to serve requests with conccurency taken into account :
+![Mean time per conccurent request curve](./mt_c_graph.png)
 
 
